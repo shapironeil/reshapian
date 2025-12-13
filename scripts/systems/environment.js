@@ -31,14 +31,24 @@ window.RSG.systems = window.RSG.systems || {};
     }
   }
 
+  function resolveRegistry() {
+    if (registryApi) return registryApi;
+    if (window.RSG && window.RSG.content && window.RSG.content.environments) {
+      return window.RSG.content.environments;
+    }
+    return null;
+  }
+
   function listEnvironments() {
-    if (!registryApi || typeof registryApi.getEnvironments !== "function") return [];
-    return registryApi.getEnvironments();
+    var reg = resolveRegistry();
+    if (!reg || typeof reg.getEnvironments !== "function") return [];
+    return reg.getEnvironments();
   }
 
   function getDefaultEnvironmentId() {
-    if (!registryApi || typeof registryApi.getDefaultEnvironmentId !== "function") return null;
-    return registryApi.getDefaultEnvironmentId();
+    var reg = resolveRegistry();
+    if (!reg || typeof reg.getDefaultEnvironmentId !== "function") return null;
+    return reg.getDefaultEnvironmentId();
   }
 
   function selectEnvironment(id) {
@@ -70,9 +80,15 @@ window.RSG.systems = window.RSG.systems || {};
   function applySelectedEnvironment(options) {
     var envId = (options && options.forceId) || getSelectedEnvironmentId() || getDefaultEnvironmentId();
     var scene = ctx.getScene ? ctx.getScene() : null;
-    if (!scene || !registryApi) return;
+    var reg = resolveRegistry();
+    if (!scene || !reg) return;
 
-    var env = registryApi.getEnvironment(envId) || registryApi.getEnvironment(getDefaultEnvironmentId());
+    var env = reg.getEnvironment(envId);
+    var fallbackUsed = false;
+    if (!env) {
+      env = reg.getEnvironment(getDefaultEnvironmentId());
+      fallbackUsed = true;
+    }
     if (!env) return;
 
     if (ctx.state && ctx.state.environment && ctx.state.environment.isSwitching) {
@@ -101,6 +117,9 @@ window.RSG.systems = window.RSG.systems || {};
       }
 
       updateHudLabel(env);
+      if (fallbackUsed) {
+        showEnvironmentNotice("Environment non disponibile. Caricato default.");
+      }
       showFade(false);
 
       if (pendingEnvironmentId && pendingEnvironmentId !== env.id) {
@@ -393,6 +412,36 @@ window.RSG.systems = window.RSG.systems || {};
     if (!fade) return;
     fade.style.display = visible ? "block" : "none";
     fade.style.opacity = visible ? "1" : "0";
+    fade.style.pointerEvents = visible ? "all" : "none";
+  }
+
+  function showEnvironmentNotice(message) {
+    if (!message) return;
+    var el = document.getElementById("environment-notice");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "environment-notice";
+      el.style.position = "fixed";
+      el.style.top = "16px";
+      el.style.left = "50%";
+      el.style.transform = "translateX(-50%)";
+      el.style.background = "rgba(0,0,0,0.8)";
+      el.style.color = "#fff";
+      el.style.padding = "10px 14px";
+      el.style.border = "1px solid rgba(255,255,255,0.25)";
+      el.style.borderRadius = "8px";
+      el.style.fontSize = "0.95rem";
+      el.style.zIndex = "1800";
+      el.style.boxShadow = "0 4px 16px rgba(0,0,0,0.4)";
+      el.style.opacity = "0";
+      el.style.transition = "opacity 0.2s ease";
+      document.body.appendChild(el);
+    }
+    el.textContent = message;
+    el.style.opacity = "1";
+    setTimeout(function () {
+      el.style.opacity = "0";
+    }, 1800);
   }
 
   window.RSG.systems.environment = {

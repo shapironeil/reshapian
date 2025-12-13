@@ -92,14 +92,20 @@ document.addEventListener("DOMContentLoaded", function () {
     selectGameMenu.style.display = "flex";
   });
 
-  // Impostazioni
-  settingsBtn.addEventListener("click", function () {
-    hubMenu.style.display = "none";
-    settingsMenu.style.display = "flex";
-  });
+  // Impostazioni (pulsante opzionale)
+  if (settingsBtn) {
+    settingsBtn.addEventListener("click", function () {
+      console.log("⚙️ Apri impostazioni");
+      hubMenu.style.display = "none";
+      settingsMenu.style.display = "flex";
+    });
+  } else {
+    console.warn("settings-btn non trovato: il pulsante Impostazioni è opzionale.");
+  }
 
   // Torna al menu principale dal gioco
   backMenuBtn.addEventListener("click", function () {
+    console.log("⬅️ Torna al menu dal gioco");
     gameContainer.style.display = "none";
     hubMenu.style.display = "flex";
     if (typeof stopGame === "function") {
@@ -110,6 +116,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // Torna indietro dagli altri menu
   backBtns.forEach((btn) => {
     btn.addEventListener("click", function () {
+      console.log("⬅️ Indietro dai sottomenu");
       selectGameMenu.style.display = "none";
       settingsMenu.style.display = "none";
       hubMenu.style.display = "flex";

@@ -99,6 +99,12 @@ function createInitialState() {
       isReloading: false,
       reloadDuration: 2.5,
     },
+    environment: {
+      currentEnvironmentId: null,
+      selectedEnvironmentId: null,
+      isSwitching: false,
+      lights: null,
+    },
   };
 }
 
@@ -240,8 +246,8 @@ window.startGame = function () {
   lastTime = state.engine.lastTime;
 
   initThreeJS();
-  createEnvironment();
-  loadModels();
+  initEnvironmentSystem();
+  applyEnvironmentSelection();
   animate();
 
   console.log("✅ ========== GIOCO AVVIATO ==========");
@@ -251,6 +257,10 @@ window.startGame = function () {
 window.stopGame = function () {
   isGameRunning = false;
   document.exitPointerLock();
+
+  if (window.RSG && window.RSG.systems && window.RSG.systems.environment && typeof window.RSG.systems.environment.teardownCurrent === "function") {
+    window.RSG.systems.environment.teardownCurrent();
+  }
 
   // Evita accumulo di listener tra run
   window.removeEventListener("resize", onWindowResize);
@@ -320,6 +330,15 @@ function initThreeJS() {
   var fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
   fillLight.position.set(-50, 30, -50);
   scene.add(fillLight);
+
+  // Conserva riferimenti per tuning per-ambiente
+  if (state && state.environment) {
+    state.environment.lights = {
+      ambient: ambientLight,
+      directional: directionalLight,
+      fill: fillLight,
+    };
+  }
 
   // Controlli
   setupControls();
@@ -652,7 +671,7 @@ function createEnvironment() {
   console.log("✅ Ambiente creato");
 }
 
-function loadModels() {
+function loadModels(modelListOverride) {
   console.log("📦 Caricamento modelli 3D...");
   if (!window.RSG || !window.RSG.content || !window.RSG.content.models) {
     console.error("❌ content/models non disponibile");
@@ -663,7 +682,7 @@ function loadModels() {
     return;
   }
 
-  var furniture = window.RSG.content.models.getFurniture();
+  var furniture = modelListOverride || window.RSG.content.models.getFurniture();
   window.RSG.systems.modelLoader.loadAll({
     scene: scene,
     state: state,
@@ -677,6 +696,62 @@ function loadModels() {
     },
   });
 }
+
+// Ambiente: wiring con registry/switch
+function initEnvironmentSystem() {
+  if (!window.RSG || !window.RSG.systems || !window.RSG.systems.environment) {
+    console.warn("⚠️ Environment system non disponibile (scripts/systems/environment.js non caricato?)");
+    return;
+  }
+
+  window.RSG.systems.environment.init({
+    state: state,
+    getScene: function () {
+      return scene;
+    },
+    getCamera: function () {
+      return camera;
+    },
+    loadModels: loadModels,
+  });
+
+  // Selezione predefinita: usa ultimo valore memorizzato o default da registry
+  var envSystem = window.RSG.systems.environment;
+  if (envSystem && typeof envSystem.getDefaultEnvironmentId === "function") {
+    if (!state.environment.selectedEnvironmentId) {
+      state.environment.selectedEnvironmentId = envSystem.getDefaultEnvironmentId();
+    }
+  }
+}
+
+function applyEnvironmentSelection() {
+  var envSystem = window.RSG && window.RSG.systems ? window.RSG.systems.environment : null;
+  if (!envSystem || typeof envSystem.applySelectedEnvironment !== "function") {
+    // Fallback legacy: crea ambiente statico
+    createEnvironment();
+    loadModels();
+    return;
+  }
+  envSystem.applySelectedEnvironment();
+}
+
+window.listEnvironments = function () {
+  var envSystem = window.RSG && window.RSG.systems ? window.RSG.systems.environment : null;
+  if (!envSystem || typeof envSystem.listEnvironments !== "function") return [];
+  return envSystem.listEnvironments();
+};
+
+window.setEnvironment = function (id) {
+  var envSystem = window.RSG && window.RSG.systems ? window.RSG.systems.environment : null;
+  if (!envSystem || typeof envSystem.selectEnvironment !== "function") return;
+  envSystem.selectEnvironment(id);
+};
+
+window.getActiveEnvironment = function () {
+  var envSystem = window.RSG && window.RSG.systems ? window.RSG.systems.environment : null;
+  if (!envSystem || typeof envSystem.getActiveEnvironment !== "function") return null;
+  return envSystem.getActiveEnvironment();
+};
 
 function setupControls() {
   if (!window.RSG || !window.RSG.systems || !window.RSG.systems.input) {

@@ -14,8 +14,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const settingsBtn = document.getElementById('settings-btn');
     const backMenuBtn = document.getElementById('back-menu-btn');
     const backBtns = document.querySelectorAll('.back-btn');
-
-    // Pulsanti impostazioni
+    
+    // Pulsanti impostazioni fffff
     const mouseSensitivity = document.getElementById('mouse-sensitivity');
     const sensitivityValue = document.getElementById('sensitivity-value');
     const volume = document.getElementById('volume');

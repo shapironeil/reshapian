@@ -21,37 +21,41 @@
         <div id="back-menu-btn" class="back-button">MENU</div>
         <!-- Schermo PC interattivo -->
         <div id="pc-screen" class="pc-screen" style="display: none;">
-            <div class="pc-window">
-                <div class="pc-header">
-                    <span class="pc-title">PC VIRTUALE</span>
-                    <button id="pc-close-btn" class="pc-close-btn">X</button>
-                </div>
-                <div class="pc-nav">
-                    <button class="pc-nav-btn" data-section="news">Notizie</button>
-                    <button class="pc-nav-btn" data-section="blog">Blog</button>
-                    <button class="pc-nav-btn" data-section="photos">Foto</button>
-                    <button class="pc-nav-btn" data-section="extra">Altro</button>
-                </div>
-                <div class="pc-content">
-                    <div class="pc-section" data-section="news">
-                        <h3>Notizie</h3>
-                        <ul>
-                            <li>Ultime novità dal mondo Shappa.</li>
-                            <li>Aggiornamenti sullo sviluppo del gioco.</li>
-                            <li>Eventi speciali e missioni in arrivo.</li>
-                        </ul>
-                    </div>
-                    <div class="pc-section" data-section="blog" style="display:none;">
-                        <h3>Blog</h3>
-                        <p>Appunti di viaggio, idee e storie dall'universo Shappa.</p>
-                    </div>
-                    <div class="pc-section" data-section="photos" style="display:none;">
-                        <h3>Foto</h3>
-                        <p>Galleria fotografica (placeholder) dei momenti più belli.</p>
-                    </div>
-                    <div class="pc-section" data-section="extra" style="display:none;">
-                        <h3>Altro</h3>
-                        <p>Altre applicazioni e strumenti verranno aggiunti qui.</p>
+            <div class="pc-shell">
+                <div class="pc-screen-area">
+                    <div class="pc-window">
+                        <div class="pc-header">
+                            <span class="pc-title">PC VIRTUALE</span>
+                            <button id="pc-close-btn" class="pc-close-btn">X</button>
+                        </div>
+                        <div class="pc-nav">
+                            <button class="pc-nav-btn" data-section="news">Notizie</button>
+                            <button class="pc-nav-btn" data-section="blog">Blog</button>
+                            <button class="pc-nav-btn" data-section="photos">Foto</button>
+                            <button class="pc-nav-btn" data-section="extra">Altro</button>
+                        </div>
+                        <div class="pc-content">
+                            <div class="pc-section" data-section="news">
+                                <h3>Notizie</h3>
+                                <ul>
+                                    <li>Ultime novità dal mondo Shappa.</li>
+                                    <li>Aggiornamenti sullo sviluppo del gioco.</li>
+                                    <li>Eventi speciali e missioni in arrivo.</li>
+                                </ul>
+                            </div>
+                            <div class="pc-section" data-section="blog" style="display:none;">
+                                <h3>Blog</h3>
+                                <p>Appunti di viaggio, idee e storie dall'universo Shappa.</p>
+                            </div>
+                            <div class="pc-section" data-section="photos" style="display:none;">
+                                <h3>Foto</h3>
+                                <p>Galleria fotografica (placeholder) dei momenti più belli.</p>
+                            </div>
+                            <div class="pc-section" data-section="extra" style="display:none;">
+                                <h3>Altro</h3>
+                                <p>Altre applicazioni e strumenti verranno aggiunti qui.</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -76,6 +80,10 @@
 
         <!-- Prompt sparo -->
         <div id="shoot-prompt" class="shoot-prompt" style="display: none;">Q - Spara</div>
+        
+        <!-- HUD: inventory tip + health bar -->
+        <div class="hud hud-bottom-left"><span class="hud-tip">TAB - Apri inventario</span></div>
+        <div class="health-bar"><div id="health-fill" class="health-fill"></div></div>
     </div>
 
     <div id="select-game-menu" class="menu-container" style="display: none;">
@@ -112,6 +120,33 @@
                 </div>
             </div>
             <button class="back-btn">INDIETRO</button>
+        </div>
+    </div>
+
+    <!-- Inventory overlay -->
+    <div id="inventory-overlay" class="inventory-overlay">
+        <div class="inventory-window">
+            <div class="equip-slots">
+                <div class="slot" id="slot-head">
+                    <div class="slot-title">Testa</div>
+                    <div class="slot-item" id="slot-head-item">-</div>
+                </div>
+                <div class="slot" id="slot-chest">
+                    <div class="slot-title">Petto</div>
+                    <div class="slot-item" id="slot-chest-item">-</div>
+                </div>
+                <div class="slot" id="slot-left-hand">
+                    <div class="slot-title">Mano sinistra</div>
+                    <div class="slot-item" id="slot-left-hand-item">-</div>
+                </div>
+                <div class="slot" id="slot-right-hand">
+                    <div class="slot-title">Mano destra</div>
+                    <div class="slot-item" id="slot-right-hand-item">-</div>
+                </div>
+            </div>
+            <div class="inventory-items" id="inventory-items">
+                <!-- Celle popolabili via JS (max 10) -->
+            </div>
         </div>
     </div>
 

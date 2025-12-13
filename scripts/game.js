@@ -23,6 +23,16 @@ var heldWeapon = null;
 var isUsingPC = false;
 var isInDialogue = false;
 var robotData = null;
+// Inventario
+var inventory = []; // { id, name, type, modelRef }
+var MAX_INVENTORY = 10;
+var equipped = {
+    head: null,
+    chest: null,
+    leftHand: null,
+    rightHand: null
+};
+var isInventoryOpen = false;
 
 // Costanti
 var PLAYER_HEIGHT = 1.7;
@@ -56,7 +66,7 @@ window.startGame = function() {
     console.log('✅ ========== GIOCO AVVIATO ==========');
 };
 
-// Funzione globale per fermare il gioco
+// Funzione globale per fermare il gioco fhntdnrthn
 window.stopGame = function() {
     isGameRunning = false;
     document.exitPointerLock();
@@ -464,6 +474,10 @@ function setupControls() {
             case 'KeyE':
                 handleInteract();
                 break;
+            case 'Tab':
+                event.preventDefault();
+                toggleInventory();
+                break;
             case 'Escape':
                 if (isUsingPC) {
                     closePC();
@@ -816,22 +830,26 @@ function handleInteract() {
 }
 
 function pickupGun(target) {
-    if (hasGun || !camera) return;
+    if (!camera) return;
     if (!target || !target.model) return;
 
-    // Rimuovi la pistola dal mondo e agganciala alla camera (prima persona)
+    // Rimuovi la pistola dal mondo
     if (target.model.parent) {
         target.model.parent.remove(target.model);
     }
-    camera.add(target.model);
-    // Posizione in basso a destra della visuale, con la canna in avanti
-    target.model.position.set(0.6, -0.4, -0.9);
-    target.model.rotation.set(0, -Math.PI / 2, 0);
 
-    hasGun = true;
-    heldWeapon = target.model;
+    // Aggiungi all'inventario (se spazio)
+    var itemId = target.id || 'pistol';
+    var itemName = (itemId === 'pistol_beretta') ? 'Pistola Beretta' : (itemId === 'pistol_43' ? 'Pistola 43 Tactical' : 'Pistola');
+    if (inventory.length < MAX_INVENTORY) {
+        inventory.push({ id: itemId, name: itemName, type: 'weapon', modelRef: target.model });
+        updateInventoryUI();
+    } else {
+        // Se pieno, scarta a terra (non ri-aggiungiamo alla scena per semplicità)
+        console.warn('Inventario pieno: impossibile aggiungere pistola.');
+    }
 
-    // Rimuovi tutte le pistole dalla lista di interagibili (le consideriamo raccolte)
+    // Rimuovi dalle interazioni
     interactables = interactables.filter(function(obj) {
         return obj.id !== 'pistol_beretta' && obj.id !== 'pistol_43';
     });
@@ -879,6 +897,107 @@ function spawnHitMarker(point) {
     marker.position.copy(point);
     scene.add(marker);
 }
+
+function toggleInventory() {
+    var overlay = document.getElementById('inventory-overlay');
+    if (!overlay) return;
+    isInventoryOpen = !isInventoryOpen;
+    overlay.style.display = isInventoryOpen ? 'flex' : 'none';
+    if (isInventoryOpen && document.pointerLockElement) {
+        document.exitPointerLock();
+    }
+}
+
+function updateInventoryUI() {
+    var grid = document.getElementById('inventory-items');
+    if (!grid) return;
+    grid.innerHTML = '';
+    // Mostra fino a MAX_INVENTORY celle
+    for (var i = 0; i < MAX_INVENTORY; i++) {
+        var cell = document.createElement('div');
+        cell.className = 'item-cell';
+        if (inventory[i]) {
+            cell.textContent = inventory[i].name;
+            (function(item){
+                cell.onclick = function(){
+                    // Equipaggia in mano destra per semplicità (se arma)
+                    if (item.type === 'weapon') {
+                        equipRightHand(item);
+                    }
+                };
+            })(inventory[i]);
+        } else {
+            cell.textContent = '-';
+        }
+        grid.appendChild(cell);
+    }
+
+    // Aggiorna slot equip
+    var sh = document.getElementById('slot-head-item');
+    var sc = document.getElementById('slot-chest-item');
+    var sl = document.getElementById('slot-left-hand-item');
+    var sr = document.getElementById('slot-right-hand-item');
+    if (sh) sh.textContent = equipped.head ? equipped.head.name : '-';
+    if (sc) sc.textContent = equipped.chest ? equipped.chest.name : '-';
+    if (sl) sl.textContent = equipped.leftHand ? equipped.leftHand.name : '-';
+    if (sr) sr.textContent = equipped.rightHand ? equipped.rightHand.name : '-';
+}
+
+function equipRightHand(item) {
+    // Rimuovi item dall'inventario
+    var idx = inventory.findIndex(function(x){ return x === item; });
+    if (idx >= 0) {
+        inventory.splice(idx, 1);
+    }
+
+    // Se c'è già qualcosa in mano destra, rimetti nell'inventario
+    if (equipped.rightHand) {
+        inventory.push(equipped.rightHand);
+        // Rimuovi il modello attuale dalla camera
+        if (equipped.rightHand.modelRef && equipped.rightHand.modelRef.parent === camera) {
+            camera.remove(equipped.rightHand.modelRef);
+        }
+    }
+
+    equipped.rightHand = item;
+    updateInventoryUI();
+
+    // Se arma 3D, agganciala alla camera per vederla nella visuale
+    var model = item.modelRef;
+    if (model) {
+        camera.add(model);
+        // Posizione tipica arma in prima persona
+        model.position.set(0.6, -0.4, -0.9);
+        // Orienta la canna in avanti rispetto alla direzione dello sguardo
+        model.rotation.set(0, -Math.PI / 2, 0);
+        hasGun = true;
+        heldWeapon = model;
+    }
+}
+
+// Semplice gestione salute
+var playerHealth = 100;
+function setPlayerHealth(value){
+    playerHealth = Math.max(0, Math.min(100, value));
+    var fill = document.getElementById('health-fill');
+    if (fill) {
+        fill.style.width = playerHealth + '%';
+        // Colore graduale
+        if (playerHealth < 35) {
+            fill.style.background = 'linear-gradient(90deg, #ff5b5b, #d63b3b)';
+        } else if (playerHealth < 70) {
+            fill.style.background = 'linear-gradient(90deg, #f3c24b, #e0a83a)';
+        } else {
+            fill.style.background = 'linear-gradient(90deg, #3bd16f, #1ea757)';
+        }
+    }
+}
+
+// Inizializza UI inventario e salute all'avvio del gioco
+window.addEventListener('load', function(){
+    setPlayerHealth(100);
+    updateInventoryUI();
+});
 
 function usePC() {
     var pcScreen = document.getElementById('pc-screen');

@@ -1,74 +1,131 @@
-console.log('📦 game.js caricato!');
+console.log("📦 game.js caricato!");
 
-// Variabili globali
-var scene, camera, renderer;
-var moveForward = false;
-var moveBackward = false;
-var moveLeft = false;
-var moveRight = false;
-var canJump = true;
-var velocity = { x: 0, y: 0, z: 0 };
-var isGameRunning = false;
-var mouseSensitivity = 1.0;
-var models = [];
-var lastTime;
-var movingAnimals = [];
-var characters = [];
-var interactables = [];
-var collisionObjects = [];
-var bullets = [];
-var staticTargets = [];
-var hasGun = false;
-var heldWeapon = null;
-var isUsingPC = false;
-var isInDialogue = false;
-var robotData = null;
-// Inventario
-var inventory = []; // { id, name, type, modelRef }
-var MAX_INVENTORY = 10;
-var equipped = {
-    head: null,
-    chest: null,
-    leftHand: null,
-    rightHand: null
-};
-var isInventoryOpen = false;
+// Namespace unico per evitare globals casuali
+window.RSG = window.RSG || {};
+window.RSG.state = window.RSG.state || {};
 
-// Armi e munizioni
-var weaponData = {
-    'pistol_beretta': {
-        name: 'Pistola Beretta 92FS',
-        type: 'weapon',
-        category: 'pistola',
-        damage: 12,
-        fireRate: 'Semiautomatica',
-        ammoCapacity: 12,
-        ammo: 12,
-        ammotype: 'pistol_ammo'
+function createInitialState() {
+  return {
+    // Modalità UI principale: riduce if-soup (per ora manteniamo anche i flag legacy)
+    mode: "gameplay",
+    engine: {
+      scene: null,
+      camera: null,
+      renderer: null,
+      lastTime: 0,
+      isGameRunning: false,
     },
-    'pistol_43': {
-        name: 'Pistola 43 Tactical',
-        type: 'weapon',
-        category: 'pistola',
-        damage: 14,
-        fireRate: 'Semiautomatica',
-        ammoCapacity: 15,
-        ammo: 15,
-        ammoType: 'pistol_ammo'
-    }
-};
+    input: {
+      moveForward: false,
+      moveBackward: false,
+      moveLeft: false,
+      moveRight: false,
+    },
+    player: {
+      canJump: true,
+      velocity: { x: 0, y: 0, z: 0 },
+      hasGun: false,
+      heldWeapon: null,
+      health: 100,
+    },
+    ui: {
+      isUsingPC: false,
+      isInDialogue: false,
+      isInventoryOpen: false,
+      currentDetailItem: null,
+    },
+    settings: {
+      mouseSensitivity: 1.0,
+    },
+    world: {
+      models: [],
+      movingAnimals: [],
+      characters: [],
+      interactables: [],
+      collisionObjects: [],
+      bullets: [],
+      staticTargets: [],
+      robotData: null,
+    },
+    inventory: {
+      items: [], // { id, name, type, modelRef, amount? }
+      max: 10,
+      equipped: {
+        head: null,
+        chest: null,
+        leftHand: null,
+        rightHand: null,
+      },
+    },
+    combat: {
+      isReloading: false,
+      reloadDuration: 2.5,
+    },
+  };
+}
 
-var ammotypes = {
-    'pistol_ammo': {
-        name: 'Munizioni 9mm',
-        type: 'ammo',
-        amount: 0 // tracciato per singolo stack
-    }
-};
+function isGameplayMode() {
+  // In futuro useremo solo state.mode; per ora supportiamo i flag legacy.
+  if (!state) return true;
+  if (state.mode && state.mode !== "gameplay") return false;
+  if (state.ui && (state.ui.isUsingPC || state.ui.isInDialogue || state.ui.isInventoryOpen)) return false;
+  return true;
+}
 
-var isReloading = false;
-var reloadDuration = 2.5; // secondi
-var currentDetailItem = null;
+// Stato runtime: ricreato a ogni startGame
+var state = (window.RSG.state.current = window.RSG.state.current || createInitialState());
+
+// --- Back-compat: manteniamo i nomi esistenti, ma la proprietà “vera” vive in state.* ---
+// Engine
+var scene = state.engine.scene;
+var camera = state.engine.camera;
+var renderer = state.engine.renderer;
+var lastTime = state.engine.lastTime;
+var isGameRunning = state.engine.isGameRunning;
+
+// Input
+var moveForward = state.input.moveForward;
+var moveBackward = state.input.moveBackward;
+var moveLeft = state.input.moveLeft;
+var moveRight = state.input.moveRight;
+
+// Player
+var canJump = state.player.canJump;
+var velocity = state.player.velocity;
+var hasGun = state.player.hasGun;
+var heldWeapon = state.player.heldWeapon;
+
+// UI
+var isUsingPC = state.ui.isUsingPC;
+var isInDialogue = state.ui.isInDialogue;
+var isInventoryOpen = state.ui.isInventoryOpen;
+var currentDetailItem = state.ui.currentDetailItem;
+
+// Settings
+var mouseSensitivity = state.settings.mouseSensitivity;
+
+// World collections
+var models = state.world.models;
+var movingAnimals = state.world.movingAnimals;
+var characters = state.world.characters;
+var interactables = state.world.interactables;
+var collisionObjects = state.world.collisionObjects;
+var bullets = state.world.bullets;
+var staticTargets = state.world.staticTargets;
+var robotData = state.world.robotData;
+
+// Inventory
+var inventory = state.inventory.items;
+var MAX_INVENTORY = state.inventory.max;
+var equipped = state.inventory.equipped;
+
+// Armi e munizioni (static defs vengono dal modulo gameplay/weapons)
+var weaponData = (window.RSG && window.RSG.gameplay && window.RSG.gameplay.weapons && window.RSG.gameplay.weapons.getWeaponDefs()) || {};
+var ammotypes = (window.RSG && window.RSG.gameplay && window.RSG.gameplay.weapons && window.RSG.gameplay.weapons.getAmmoDefs()) || {};
+
+var isReloading = state.combat.isReloading;
+var reloadDuration = state.combat.reloadDuration; // secondi
+// currentDetailItem vive in state.ui (vedi bind sopra)
 
 // Costanti
 var PLAYER_HEIGHT = 1.7;
@@ -83,1209 +140,1233 @@ var BULLET_SPEED = 80.0;
 var BULLET_MAX_DISTANCE = 200.0;
 
 // Funzione globale per avviare il gioco
-window.startGame = function() {
-    if (isGameRunning) {
-        console.log('⚠️ Gioco già in esecuzione');
-        return;
-    }
-    
-    console.log('🎮 ========== AVVIO GIOCO ==========');
-    isGameRunning = true;
-    canJump = true;
-    lastTime = performance.now();
-    
-    initThreeJS();
-    createEnvironment();
-    loadModels();
-    animate();
-    
-    console.log('✅ ========== GIOCO AVVIATO ==========');
+window.startGame = function () {
+  if (isGameRunning) {
+    console.log("⚠️ Gioco già in esecuzione");
+    return;
+  }
+
+  console.log("🎮 ========== AVVIO GIOCO ==========");
+  // Ricrea lo stato a ogni nuova partita (evita accumuli tra start/stop)
+  state = window.RSG.state.current = createInitialState();
+
+  // Re-bind variabili legacy alla nuova istanza di stato
+  scene = state.engine.scene;
+  camera = state.engine.camera;
+  renderer = state.engine.renderer;
+  lastTime = state.engine.lastTime;
+  isGameRunning = state.engine.isGameRunning;
+
+  moveForward = state.input.moveForward;
+  moveBackward = state.input.moveBackward;
+  moveLeft = state.input.moveLeft;
+  moveRight = state.input.moveRight;
+
+  canJump = state.player.canJump;
+  velocity = state.player.velocity;
+  hasGun = state.player.hasGun;
+  heldWeapon = state.player.heldWeapon;
+
+  isUsingPC = state.ui.isUsingPC;
+  isInDialogue = state.ui.isInDialogue;
+  isInventoryOpen = state.ui.isInventoryOpen;
+  currentDetailItem = state.ui.currentDetailItem;
+
+  mouseSensitivity = state.settings.mouseSensitivity;
+
+  models = state.world.models;
+  lastTime = state.engine.lastTime;
+  movingAnimals = state.world.movingAnimals;
+  characters = state.world.characters;
+  interactables = state.world.interactables;
+  collisionObjects = state.world.collisionObjects;
+  bullets = state.world.bullets;
+  staticTargets = state.world.staticTargets;
+  robotData = state.world.robotData;
+
+  inventory = state.inventory.items;
+  MAX_INVENTORY = state.inventory.max;
+  equipped = state.inventory.equipped;
+
+  isReloading = state.combat.isReloading;
+  reloadDuration = state.combat.reloadDuration;
+  playerHealth = state.player.health;
+
+  // Avvio effettivo
+  state.mode = "gameplay";
+  state.engine.isGameRunning = true;
+  isGameRunning = true;
+  state.player.canJump = true;
+  canJump = true;
+  state.engine.lastTime = performance.now();
+  lastTime = state.engine.lastTime;
+
+  initThreeJS();
+  createEnvironment();
+  loadModels();
+  animate();
+
+  console.log("✅ ========== GIOCO AVVIATO ==========");
 };
 
 // Funzione globale per fermare il gioco fhntdnrthn
-window.stopGame = function() {
-    isGameRunning = false;
-    document.exitPointerLock();
-    
-    if (renderer) {
-        renderer.dispose();
-        var gameCanvas = document.getElementById('game-canvas');
-        while (gameCanvas.firstChild) {
-            gameCanvas.removeChild(gameCanvas.firstChild);
-        }
+window.stopGame = function () {
+  isGameRunning = false;
+  document.exitPointerLock();
+
+  // Evita accumulo di listener tra run
+  window.removeEventListener("resize", onWindowResize);
+
+  // Pulisci listener input (evita duplicazioni tra start/stop)
+  if (window.RSG && window.RSG.systems && window.RSG.systems.input) {
+    window.RSG.systems.input.dispose();
+  }
+
+  if (renderer) {
+    renderer.dispose();
+    var gameCanvas = document.getElementById("game-canvas");
+    while (gameCanvas.firstChild) {
+      gameCanvas.removeChild(gameCanvas.firstChild);
     }
+  }
 };
 
 function initThreeJS() {
-    console.log('🚀 Inizializzazione Three.js...');
-    
-    if (typeof THREE === 'undefined') {
-        console.error('❌ THREE.js non trovato!');
-        alert('Errore: Three.js non caricato.');
-        return false;
-    }
-    
-    console.log('✅ THREE.js versione:', THREE.REVISION);
-    
-    // Scena
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87ceeb);
-    scene.fog = new THREE.Fog(0x87ceeb, 50, 300);
-    
-    // Camera prima persona
-    var container = document.getElementById('game-canvas');
-    var width = container.clientWidth || window.innerWidth;
-    var height = container.clientHeight || window.innerHeight;
-    
-    camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-    camera.position.set(0, PLAYER_HEIGHT, 10);
-    camera.rotation.order = 'YXZ';
-    
-    // Renderer
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    container.appendChild(renderer.domElement);
-    
-    // Illuminazione
-    var ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
-    
-    var directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(50, 50, 50);
-    directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 2048;
-    directionalLight.shadow.mapSize.height = 2048;
-    scene.add(directionalLight);
-    
-    // Luce riempimento
-    var fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
-    fillLight.position.set(-50, 30, -50);
-    scene.add(fillLight);
-    
-    // Controlli
-    setupControls();
-    
-    window.addEventListener('resize', onWindowResize);
-    
-    console.log('✅ Three.js inizializzato');
-    return true;
+  console.log("🚀 Inizializzazione Three.js...");
+
+  if (typeof THREE === "undefined") {
+    console.error("❌ THREE.js non trovato!");
+    alert("Errore: Three.js non caricato.");
+    return false;
+  }
+
+  console.log("✅ THREE.js versione:", THREE.REVISION);
+
+  // Scena
+  state.engine.scene = new THREE.Scene();
+  scene = state.engine.scene;
+  scene.background = new THREE.Color(0x87ceeb);
+  scene.fog = new THREE.Fog(0x87ceeb, 50, 300);
+
+  // Camera prima persona
+  var container = document.getElementById("game-canvas");
+  var width = container.clientWidth || window.innerWidth;
+  var height = container.clientHeight || window.innerHeight;
+
+  state.engine.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+  camera = state.engine.camera;
+  camera.position.set(0, PLAYER_HEIGHT, 10);
+  camera.rotation.order = "YXZ";
+
+  // Renderer
+  state.engine.renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer = state.engine.renderer;
+  renderer.setSize(width, height);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  container.appendChild(renderer.domElement);
+
+  // Illuminazione
+  var ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+  scene.add(ambientLight);
+
+  var directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  directionalLight.position.set(50, 50, 50);
+  directionalLight.castShadow = true;
+  directionalLight.shadow.mapSize.width = 2048;
+  directionalLight.shadow.mapSize.height = 2048;
+  scene.add(directionalLight);
+
+  // Luce riempimento
+  var fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+  fillLight.position.set(-50, 30, -50);
+  scene.add(fillLight);
+
+  // Controlli
+  setupControls();
+
+  // Sistema movimento/collisioni
+  setupMovementSystem();
+
+  // Sistema proiettili/armi
+  setupProjectilesSystem();
+
+  // Sistema inventario (runtime logic)
+  setupInventorySystem();
+
+  // Sistema interazioni (prompt + routing PC/dialogo/pickup)
+  setupInteractionsSystem();
+
+  // Sistema AI (animali + robot follow)
+  setupAISystem();
+
+  window.addEventListener("resize", onWindowResize);
+
+  console.log("✅ Three.js inizializzato");
+  return true;
+}
+
+function setupMovementSystem() {
+  if (!window.RSG || !window.RSG.systems || !window.RSG.systems.movement) {
+    console.warn("⚠️ Movement system non disponibile (scripts/systems/movement.js non caricato?)");
+    return;
+  }
+
+  window.RSG.systems.movement.init({
+    state: state,
+    getCamera: function () {
+      return camera;
+    },
+    resolveCollisions: resolveCollisions,
+    isGameplayMode: isGameplayMode,
+    constants: {
+      MOVE_SPEED: MOVE_SPEED,
+      GRAVITY: GRAVITY,
+      PLAYER_HEIGHT: PLAYER_HEIGHT,
+    },
+  });
+}
+
+function setupInventorySystem() {
+  if (!window.RSG || !window.RSG.gameplay || !window.RSG.gameplay.inventory) {
+    console.warn("⚠️ Inventory system non disponibile (scripts/gameplay/inventory.js non caricato?)");
+    return;
+  }
+
+  window.RSG.gameplay.inventory.init({
+    state: state,
+    ui: window.RSG && window.RSG.ui ? window.RSG.ui : null,
+    getCamera: function () {
+      return camera;
+    },
+    onEquipWeapon: function (item, model) {
+      hasGun = !!item;
+      if (state && state.player) state.player.hasGun = !!item;
+      heldWeapon = model || null;
+      if (state && state.player) state.player.heldWeapon = heldWeapon;
+    },
+  });
+}
+
+function setupProjectilesSystem() {
+  if (!window.RSG || !window.RSG.systems || !window.RSG.systems.projectiles) {
+    console.warn("⚠️ Projectiles system non disponibile (scripts/systems/projectiles.js non caricato?)");
+    return;
+  }
+
+  window.RSG.systems.projectiles.init({
+    state: state,
+    getCamera: function () {
+      return camera;
+    },
+    getScene: function () {
+      return scene;
+    },
+    getModels: function () {
+      return models;
+    },
+    getStaticTargets: function () {
+      return staticTargets;
+    },
+    getCharacters: function () {
+      return characters;
+    },
+    getMovingAnimals: function () {
+      return movingAnimals;
+    },
+    constants: {
+      BULLET_SPEED: BULLET_SPEED,
+      BULLET_MAX_DISTANCE: BULLET_MAX_DISTANCE,
+      GRAVITY: GRAVITY,
+      PLAYER_RADIUS: PLAYER_RADIUS,
+    },
+    ui: window.RSG && window.RSG.ui ? window.RSG.ui : null,
+    updateInventoryUI: function () {
+      updateInventoryUI();
+    },
+  });
+}
+
+function setupInteractionsSystem() {
+  if (!window.RSG || !window.RSG.systems || !window.RSG.systems.interactions) {
+    console.warn("⚠️ Interactions system non disponibile (scripts/systems/interactions.js non caricato?)");
+    return;
+  }
+
+  window.RSG.systems.interactions.init({
+    state: state,
+    getCamera: function () {
+      return camera;
+    },
+    ui: window.RSG && window.RSG.ui ? window.RSG.ui : {},
+    updateInventoryUI: function () {
+      updateInventoryUI();
+    },
+    isGameplayMode: isGameplayMode,
+    constants: {
+      INTERACT_DISTANCE: INTERACT_DISTANCE,
+    },
+  });
+}
+
+function setupAISystem() {
+  if (!window.RSG || !window.RSG.systems || !window.RSG.systems.ai) {
+    console.warn("⚠️ AI system non disponibile (scripts/systems/ai.js non caricato?)");
+    return;
+  }
+
+  window.RSG.systems.ai.init({
+    state: state,
+    getCamera: function () {
+      return camera;
+    },
+    constants: {
+      GRAVITY: GRAVITY,
+    },
+  });
 }
 
 function createEnvironment() {
-    console.log('🌍 Creazione ambiente 3D...');
-    
-    // Pavimento esterno (giardino / cortile)
-    var floorGeometry = new THREE.PlaneGeometry(200, 200);
-    var floorMaterial = new THREE.MeshStandardMaterial({ 
-        color: 0x4c8c4a,
-        roughness: 0.8
-    });
-    var floor = new THREE.Mesh(floorGeometry, floorMaterial);
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    scene.add(floor);
-    
-    // Griglia
-    var gridHelper = new THREE.GridHelper(200, 40, 0x000000, 0x444444);
-    scene.add(gridHelper);
+  console.log("🌍 Creazione ambiente 3D...");
 
-    // Pavimento interno della casa (legno) nella zona centrale
-    var houseFloorGeometry = new THREE.PlaneGeometry(40, 30);
-    var houseFloorMaterial = new THREE.MeshStandardMaterial({ 
-        color: 0x8B7355,
-        roughness: 0.7
-    });
-    var houseFloor = new THREE.Mesh(houseFloorGeometry, houseFloorMaterial);
-    houseFloor.rotation.x = -Math.PI / 2;
-    houseFloor.position.set(0, 0.02, 0);
-    houseFloor.receiveShadow = true;
-    scene.add(houseFloor);
-    
-    // Pareti perimetrali per creare un grande edificio che contiene la casa
-    var wallMaterial = new THREE.MeshStandardMaterial({ color: 0xE8D4B8 });
-    
-    // Parete nord
-    var wallGeometry = new THREE.BoxGeometry(200, 10, 2);
-    var wallNorth = new THREE.Mesh(wallGeometry, wallMaterial);
-    wallNorth.position.set(0, 5, -100);
-    wallNorth.castShadow = true;
-    wallNorth.receiveShadow = true;
-    scene.add(wallNorth);
-    
-    // Parete sud
-    var wallSouth = new THREE.Mesh(wallGeometry, wallMaterial);
-    wallSouth.position.set(0, 5, 100);
-    wallSouth.castShadow = true;
-    wallSouth.receiveShadow = true;
-    scene.add(wallSouth);
-    
-    // Parete ovest
-    var wallGeometry2 = new THREE.BoxGeometry(2, 10, 200);
-    var wallWest = new THREE.Mesh(wallGeometry2, wallMaterial);
-    wallWest.position.set(-100, 5, 0);
-    wallWest.castShadow = true;
-    wallWest.receiveShadow = true;
-    scene.add(wallWest);
-    
-    // Parete est
-    var wallEast = new THREE.Mesh(wallGeometry2, wallMaterial);
-    wallEast.position.set(100, 5, 0);
-    wallEast.castShadow = true;
-    wallEast.receiveShadow = true;
-    scene.add(wallEast);
-        // Rimuovere la parete interna per un soggiorno aperto
+  // Pavimento esterno (giardino / cortile)
+  var floorGeometry = new THREE.PlaneGeometry(200, 200);
+  var floorMaterial = new THREE.MeshStandardMaterial({
+    color: 0x4c8c4a,
+    roughness: 0.8,
+  });
+  var floor = new THREE.Mesh(floorGeometry, floorMaterial);
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
 
-    // Muri perimetrali della casa (più bassi, attorno al pavimento interno)
-    var houseWallMaterial = new THREE.MeshStandardMaterial({ color: 0xD9C1A5 });
+  // Griglia
+  var gridHelper = new THREE.GridHelper(200, 40, 0x000000, 0x444444);
+  scene.add(gridHelper);
 
-    // Parete posteriore della casa
-    var houseBackWallGeometry = new THREE.BoxGeometry(40, 3, 0.5);
-    var houseBackWall = new THREE.Mesh(houseBackWallGeometry, houseWallMaterial);
-    houseBackWall.position.set(0, 1.5, -15);
-    houseBackWall.castShadow = true;
-    houseBackWall.receiveShadow = true;
-    scene.add(houseBackWall);
+  // Pavimento interno della casa (legno) nella zona centrale
+  var houseFloorGeometry = new THREE.PlaneGeometry(40, 30);
+  var houseFloorMaterial = new THREE.MeshStandardMaterial({
+    color: 0x8b7355,
+    roughness: 0.7,
+  });
+  var houseFloor = new THREE.Mesh(houseFloorGeometry, houseFloorMaterial);
+  houseFloor.rotation.x = -Math.PI / 2;
+  houseFloor.position.set(0, 0.02, 0);
+  houseFloor.receiveShadow = true;
+  scene.add(houseFloor);
 
-    // Pareti laterali della casa
-    var houseSideWallGeometry = new THREE.BoxGeometry(0.5, 3, 30);
+  // Pareti perimetrali per creare un grande edificio che contiene la casa
+  var wallMaterial = new THREE.MeshStandardMaterial({ color: 0xe8d4b8 });
 
-    var houseLeftWall = new THREE.Mesh(houseSideWallGeometry, houseWallMaterial);
-    houseLeftWall.position.set(-20, 1.5, 0);
-    houseLeftWall.castShadow = true;
-    houseLeftWall.receiveShadow = true;
-    scene.add(houseLeftWall);
+  // Parete nord
+  var wallGeometry = new THREE.BoxGeometry(200, 10, 2);
+  var wallNorth = new THREE.Mesh(wallGeometry, wallMaterial);
+  wallNorth.position.set(0, 5, -100);
+  wallNorth.castShadow = true;
+  wallNorth.receiveShadow = true;
+  scene.add(wallNorth);
 
-    var houseRightWall = new THREE.Mesh(houseSideWallGeometry, houseWallMaterial);
-    houseRightWall.position.set(20, 1.5, 0);
-    houseRightWall.castShadow = true;
-    houseRightWall.receiveShadow = true;
-    scene.add(houseRightWall);
+  // Parete sud
+  var wallSouth = new THREE.Mesh(wallGeometry, wallMaterial);
+  wallSouth.position.set(0, 5, 100);
+  wallSouth.castShadow = true;
+  wallSouth.receiveShadow = true;
+  scene.add(wallSouth);
 
-    // Parete frontale divisa in due segmenti per lasciare un'apertura (porta)
-    var houseFrontWallGeometry = new THREE.BoxGeometry(18, 3, 0.5);
+  // Parete ovest
+  var wallGeometry2 = new THREE.BoxGeometry(2, 10, 200);
+  var wallWest = new THREE.Mesh(wallGeometry2, wallMaterial);
+  wallWest.position.set(-100, 5, 0);
+  wallWest.castShadow = true;
+  wallWest.receiveShadow = true;
+  scene.add(wallWest);
 
-    var houseFrontWallLeft = new THREE.Mesh(houseFrontWallGeometry, houseWallMaterial);
-    houseFrontWallLeft.position.set(-11, 1.5, 15);
-    houseFrontWallLeft.castShadow = true;
-    houseFrontWallLeft.receiveShadow = true;
-    scene.add(houseFrontWallLeft);
+  // Parete est
+  var wallEast = new THREE.Mesh(wallGeometry2, wallMaterial);
+  wallEast.position.set(100, 5, 0);
+  wallEast.castShadow = true;
+  wallEast.receiveShadow = true;
+  scene.add(wallEast);
+  // Rimuovere la parete interna per un soggiorno aperto
 
-    var houseFrontWallRight = new THREE.Mesh(houseFrontWallGeometry, houseWallMaterial);
-    houseFrontWallRight.position.set(11, 1.5, 15);
-    houseFrontWallRight.castShadow = true;
-    houseFrontWallRight.receiveShadow = true;
-    scene.add(houseFrontWallRight);
+  // Muri perimetrali della casa (più bassi, attorno al pavimento interno)
+  var houseWallMaterial = new THREE.MeshStandardMaterial({ color: 0xd9c1a5 });
 
-    // Tavolo semplice nel "studio" con il PC sopra
-    var tableMaterial = new THREE.MeshStandardMaterial({ color: 0xC2A383, roughness: 0.6 });
+  // Parete posteriore della casa
+  var houseBackWallGeometry = new THREE.BoxGeometry(40, 3, 0.5);
+  var houseBackWall = new THREE.Mesh(houseBackWallGeometry, houseWallMaterial);
+  houseBackWall.position.set(0, 1.5, -15);
+  houseBackWall.castShadow = true;
+  houseBackWall.receiveShadow = true;
+  scene.add(houseBackWall);
 
-    // Piano del tavolo
-    var tableTopGeometry = new THREE.BoxGeometry(4.5, 0.1, 2.0);
-    var tableTop = new THREE.Mesh(tableTopGeometry, tableMaterial);
-    tableTop.position.set(10, 1, -5);
-    tableTop.castShadow = true;
-    tableTop.receiveShadow = true;
-    scene.add(tableTop);
+  // Pareti laterali della casa
+  var houseSideWallGeometry = new THREE.BoxGeometry(0.5, 3, 30);
 
-    // Gambe del tavolo
-    var legGeometry = new THREE.BoxGeometry(0.12, 1, 0.12);
-    var legOffsets = [
-        [-1.35, 0.5, -0.6],
-        [ 1.35, 0.5, -0.6],
-        [-1.35, 0.5,  0.6],
-        [ 1.35, 0.5,  0.6]
-    ];
-    legOffsets.forEach(function(offset) {
-        var leg = new THREE.Mesh(legGeometry, tableMaterial);
-        leg.position.set(10 + offset[0], offset[1], -5 + offset[2]);
-        leg.castShadow = true;
-        leg.receiveShadow = true;
-        scene.add(leg);
-    });
+  var houseLeftWall = new THREE.Mesh(houseSideWallGeometry, houseWallMaterial);
+  houseLeftWall.position.set(-20, 1.5, 0);
+  houseLeftWall.castShadow = true;
+  houseLeftWall.receiveShadow = true;
+  scene.add(houseLeftWall);
 
-    // Registra superfici statiche come bersagli per i proiettili
-    staticTargets.push(
-        floor,
-        houseFloor,
-        wallNorth,
-        wallSouth,
-        wallWest,
-        wallEast,
-        houseBackWall,
-        houseLeftWall,
-        houseRightWall,
-        houseFrontWallLeft,
-        houseFrontWallRight,
-        tableTop
-    );
-    
-    console.log('✅ Ambiente creato');
+  var houseRightWall = new THREE.Mesh(houseSideWallGeometry, houseWallMaterial);
+  houseRightWall.position.set(20, 1.5, 0);
+  houseRightWall.castShadow = true;
+  houseRightWall.receiveShadow = true;
+  scene.add(houseRightWall);
+
+  // Parete frontale divisa in due segmenti per lasciare un'apertura (porta)
+  var houseFrontWallGeometry = new THREE.BoxGeometry(18, 3, 0.5);
+
+  var houseFrontWallLeft = new THREE.Mesh(houseFrontWallGeometry, houseWallMaterial);
+  houseFrontWallLeft.position.set(-11, 1.5, 15);
+  houseFrontWallLeft.castShadow = true;
+  houseFrontWallLeft.receiveShadow = true;
+  scene.add(houseFrontWallLeft);
+
+  var houseFrontWallRight = new THREE.Mesh(houseFrontWallGeometry, houseWallMaterial);
+  houseFrontWallRight.position.set(11, 1.5, 15);
+  houseFrontWallRight.castShadow = true;
+  houseFrontWallRight.receiveShadow = true;
+  scene.add(houseFrontWallRight);
+
+  // Tavolo semplice nel "studio" con il PC sopra
+  var tableMaterial = new THREE.MeshStandardMaterial({ color: 0xc2a383, roughness: 0.6 });
+
+  // Piano del tavolo
+  var tableTopGeometry = new THREE.BoxGeometry(4.5, 0.1, 2.0);
+  var tableTop = new THREE.Mesh(tableTopGeometry, tableMaterial);
+  tableTop.position.set(10, 1, -5);
+  tableTop.castShadow = true;
+  tableTop.receiveShadow = true;
+  scene.add(tableTop);
+
+  // Gambe del tavolo
+  var legGeometry = new THREE.BoxGeometry(0.12, 1, 0.12);
+  var legOffsets = [
+    [-1.35, 0.5, -0.6],
+    [1.35, 0.5, -0.6],
+    [-1.35, 0.5, 0.6],
+    [1.35, 0.5, 0.6],
+  ];
+  legOffsets.forEach(function (offset) {
+    var leg = new THREE.Mesh(legGeometry, tableMaterial);
+    leg.position.set(10 + offset[0], offset[1], -5 + offset[2]);
+    leg.castShadow = true;
+    leg.receiveShadow = true;
+    scene.add(leg);
+  });
+
+  // Registra superfici statiche come bersagli per i proiettili
+  staticTargets.push(
+    floor,
+    houseFloor,
+    wallNorth,
+    wallSouth,
+    wallWest,
+    wallEast,
+    houseBackWall,
+    houseLeftWall,
+    houseRightWall,
+    houseFrontWallLeft,
+    houseFrontWallRight,
+    tableTop
+  );
+
+  console.log("✅ Ambiente creato");
 }
 
 function loadModels() {
-    console.log('📦 Caricamento modelli 3D...');
-    console.log('THREE.GLTFLoader disponibile:', typeof THREE.GLTFLoader);
-    
-    // Lista modelli organizzati per casa + giardino
-    var furniture = [
-        // --- INTERNI: zona soggiorno ---
-        { file: 'old_sofa_free.glb', pos: [0, 0, 8], rot: Math.PI, scale: 1.5, category: 'furniture', area: 'indoor' },
-        { file: 'old_sofa_free.glb', pos: [-5, 0, 6], rot: Math.PI * 0.9, scale: 1.3, category: 'furniture', area: 'indoor' },
-        { file: 'old_sofa_free.glb', pos: [5, 0, 6], rot: Math.PI * 1.1, scale: 1.3, category: 'furniture', area: 'indoor' },
-        { file: 'vintage_tv_free.glb', pos: [0, 1, 0], rot: Math.PI, scale: 0.8, category: 'furniture', area: 'indoor' },
-        { file: 'chocolate_beech_bookshelf_free.glb', pos: [-8, 0, -4], rot: Math.PI / 2, scale: 1.0, category: 'decor', area: 'indoor' },
-        { file: 'dusty_old_bookshelf_free.glb', pos: [8, 0, -4], rot: -Math.PI / 2, scale: 1.0, category: 'decor', area: 'indoor' },
-        { file: 'cowboy_hat_free.glb', pos: [-8, 1.6, -3.5], rot: 0, scale: 0.6, category: 'decor', area: 'indoor' },
-        { file: 'blue_eyeball_free.glb', pos: [8, 1.4, -3.5], rot: 0, scale: 0.5, category: 'decor', area: 'indoor' },
+  console.log("📦 Caricamento modelli 3D...");
+  if (!window.RSG || !window.RSG.content || !window.RSG.content.models) {
+    console.error("❌ content/models non disponibile");
+    return;
+  }
+  if (!window.RSG.systems || !window.RSG.systems.modelLoader) {
+    console.error("❌ systems/model-loader non disponibile");
+    return;
+  }
 
-        // --- INTERNI: zona studio / lavoro ---
-        { file: 'laptop_free.glb', pos: [10, 1.06, -5], rot: 0, scale: 0.25, category: 'usable', area: 'indoor', id: 'pc_laptop' },
-        { file: 'beretta_92fs_-_game_ready_-_free.glb', pos: [11, 1.08, -4.5], rot: Math.PI / 2, scale: 0.15, category: 'usable', area: 'indoor', id: 'pistol_beretta' },
-        { file: 'pistol_43_tactical__free_lowpoly.glb', pos: [9, 1.08, -4.5], rot: Math.PI / 2, scale: 0.15, category: 'usable', area: 'indoor', id: 'pistol_43' },
-        { file: 'paladin_longsword_free_download.glb', pos: [-12, 1.2, 4], rot: 0, scale: 0.8, category: 'usable', area: 'indoor' },
-        { file: 'tools_pack._free.glb', pos: [-10, 0, 6], rot: 0, scale: 0.9, category: 'usable', area: 'indoor' },
-
-        // --- INTERNI: personaggi ---
-        { file: 'r.e.p.o_realistic_character_free_download.glb', pos: [-3, 0, 2], rot: Math.PI / 6, scale: 1.0, category: 'robot', area: 'indoor', id: 'robot_helper' },
-        { file: 'realistic_male_character.glb', pos: [3, 0, 2], rot: -Math.PI / 6, scale: 1.0, category: 'character', area: 'indoor' },
-
-        // --- ESTERNI: panchina e rocce nel giardino ---
-        { file: 'bench_model_free.glb', pos: [-10, 0, 35], rot: Math.PI / 2, scale: 1.0, category: 'furniture', area: 'garden' },
-        { file: 'free_pack_-_rocks_stylized.glb', pos: [-5, 0, 50], rot: 0, scale: 1.0, category: 'decor', area: 'garden' },
-        { file: 'free_pack_-_rocks_stylized.glb', pos: [12, 0, 60], rot: 0.3, scale: 1.0, category: 'decor', area: 'garden' },
-
-        // --- ESTERNI: erba ripetuta per il giardino ---
-        { file: 'grass_free_download.glb', pos: [0, 0, 45], rot: 0, scale: 1.5, category: 'repeated', area: 'garden' },
-        { file: 'grass_free_download.glb', pos: [-8, 0, 55], rot: 0.2, scale: 1.5, category: 'repeated', area: 'garden' },
-        { file: 'grass_free_download.glb', pos: [8, 0, 55], rot: -0.2, scale: 1.5, category: 'repeated', area: 'garden' },
-        { file: 'grass_free_download.glb', pos: [0, 0, 65], rot: 0.1, scale: 1.5, category: 'repeated', area: 'garden' },
-        { file: 'grass_free_download.glb', pos: [-15, 0, 45], rot: -0.1, scale: 1.5, category: 'repeated', area: 'garden' },
-        { file: 'grass_free_download.glb', pos: [15, 0, 45], rot: 0.15, scale: 1.5, category: 'repeated', area: 'garden' },
-        { file: 'grass_free_download.glb', pos: [-15, 0, 60], rot: 0.05, scale: 1.5, category: 'repeated', area: 'garden' },
-        { file: 'grass_free_download.glb', pos: [15, 0, 60], rot: -0.05, scale: 1.5, category: 'repeated', area: 'garden' },
-        { file: 'grass_free_download.glb', pos: [-5, 0, 70], rot: 0.12, scale: 1.5, category: 'repeated', area: 'garden' },
-        { file: 'grass_free_download.glb', pos: [5, 0, 70], rot: -0.12, scale: 1.5, category: 'repeated', area: 'garden' },
-
-        // --- ESTERNI: strutture e strada ---
-        { file: 'warehouse_fbx_model_free.glb', pos: [60, 0, 60], rot: Math.PI / 4, scale: 0.5, category: 'structure', area: 'garden' },
-        { file: 'interior_free.glb', pos: [-60, 0, -40], rot: 0, scale: 0.5, category: 'structure', area: 'outdoor' },
-        { file: 'road_free.glb', pos: [0, 0, -70], rot: 0, scale: 0.7, category: 'structure', area: 'outdoor' },
-        { file: 'free_barricade.glb', pos: [0, 0, 80], rot: 0, scale: 1.0, category: 'structure', area: 'garden' },
-
-        // --- ANIMALI nel giardino (si muovono sull'erba) ---
-        { file: 'deer_demo_free_download.glb', pos: [0, 0, 55], rot: 0, scale: 1.5, category: 'animal', area: 'garden', radius: 10, speed: 0.5 }
-    ];
-    
-    if (typeof THREE.GLTFLoader === 'undefined') {
-        console.error('❌ GLTFLoader NON disponibile!');
-        console.log('THREE:', typeof THREE);
-        console.log('Oggetti THREE disponibili:', Object.keys(THREE).filter(k => k.includes('Loader')));
-        return;
-    }
-    
-    console.log('✅ GLTFLoader disponibile, inizio caricamento...');
-    
-    var loader = new THREE.GLTFLoader();
-    var loadedCount = 0;
-    
-    furniture.forEach(function(item) {
-        console.log('🔄 Tentativo caricamento:', item.file);
-        loader.load(
-            'models/' + item.file,
-            function(gltf) {
-                var model = gltf.scene;
-                model.position.set(item.pos[0], item.pos[1], item.pos[2]);
-                model.rotation.y = item.rot;
-
-                var baseScale = (typeof item.scale === 'number') ? item.scale : 1;
-                var finalScale = baseScale * MODEL_GLOBAL_SCALE;
-                model.scale.set(finalScale, finalScale, finalScale);
-
-                // Salva metadati per categorie (animale, personaggio, ecc.)
-                model.userData = model.userData || {};
-                model.userData.category = item.category || null;
-                model.userData.id = item.id || null;
-                
-                model.traverse(function(child) {
-                    if (child.isMesh) {
-                        child.castShadow = true;
-                        child.receiveShadow = true;
-                    }
-                });
-                
-                scene.add(model);
-                models.push(model);
-
-                // Calcola un raggio di collisione approssimativo (in pianta)
-                var bbox = new THREE.Box3().setFromObject(model);
-                var size = new THREE.Vector3();
-                bbox.getSize(size);
-                var radiusXZ = Math.max(size.x, size.z) / 2;
-                collisionObjects.push({
-                    model: model,
-                    radius: radiusXZ + 0.3
-                });
-                loadedCount++;
-                
-                console.log('✅ Caricato:', item.file, '(' + loadedCount + '/' + furniture.length + ')');
-
-                // Registra oggetti interattivi (PC, pistole, robottino)
-                if (item.id) {
-                    var interactable = {
-                        id: item.id,
-                        type: item.category,
-                        model: model
-                    };
-                    interactables.push(interactable);
-
-                    if (item.category === 'robot') {
-                        robotData = {
-                            model: model,
-                            speed: 2.0,
-                            followPlayer: false,
-                            wanderAngle: 0
-                        };
-                    }
-                }
-
-                // Se è un animale, preparalo per il movimento nel giardino
-                if (item.category === 'animal') {
-                    var center = new THREE.Vector3(item.pos[0], item.pos[1], item.pos[2]);
-                    movingAnimals.push({
-                        model: model,
-                        center: center,
-                        radius: item.radius || 10,
-                        speed: item.speed || 0.5,
-                        angle: 0,
-                        alive: true,
-                        fallProgress: 0,
-                        verticalSpeed: 0,
-                        hasLanded: false
-                    });
-                }
-
-                // Se è un personaggio, aggiungilo alla lista dei bersagli colpibili
-                if (item.category === 'character') {
-                    characters.push({ model: model });
-                }
-            },
-            undefined,
-            function(error) {
-                console.warn('⚠️ Errore caricamento', item.file);
-            }
-        );
-    });
+  var furniture = window.RSG.content.models.getFurniture();
+  window.RSG.systems.modelLoader.loadAll({
+    scene: scene,
+    state: state,
+    modelList: furniture,
+    constants: { MODEL_GLOBAL_SCALE: MODEL_GLOBAL_SCALE },
+    onProgress: function (count, total, file) {
+      console.log("✅ Caricato:", file, "(" + count + "/" + total + ")");
+    },
+    onError: function (err, file) {
+      console.warn("⚠️ Errore caricamento", file);
+    },
+  });
 }
 
 function setupControls() {
-    document.addEventListener('keydown', function(event) {
-        switch (event.code) {
-            case 'KeyW':
-                moveForward = true;
-                break;
-            case 'KeyS':
-                moveBackward = true;
-                break;
-            case 'KeyA':
-                moveLeft = true;
-                break;
-            case 'KeyD':
-                moveRight = true;
-                break;
-            case 'Space':
-                if (canJump) {
-                    velocity.y = JUMP_VELOCITY;
-                    canJump = false;
-                }
-                event.preventDefault();
-                break;
-            case 'KeyQ':
-                if (hasGun && !isUsingPC && !isInDialogue) {
-                    shoot();
-                }
-                break;
-            case 'KeyE':
-                handleInteract();
-                break;
-            case 'Tab':
-                event.preventDefault();
-                toggleInventory();
-                break;
-            case 'KeyR':
-                if (equipped.rightHand && equipped.rightHand.type === 'weapon' && !isReloading && !isUsingPC && !isInDialogue) {
-                    beginReload();
-                }
-                break;
-            case 'Escape':
-                if (isUsingPC) {
-                    closePC();
-                } else if (isInDialogue) {
-                    closeDialogue();
-                }
-                break;
-        }
-    });
-    
-    document.addEventListener('keyup', function(event) {
-        switch (event.code) {
-            case 'KeyW':
-                moveForward = false;
-                break;
-            case 'KeyS':
-                moveBackward = false;
-                break;
-            case 'KeyA':
-                moveLeft = false;
-                break;
-            case 'KeyD':
-                moveRight = false;
-                break;
-        }
-    });
-    
-    document.addEventListener('mousemove', function(event) {
-        if (document.pointerLockElement && !isUsingPC && !isInDialogue) {
-            var movementX = event.movementX || 0;
-            var movementY = event.movementY || 0;
-            
-            camera.rotation.y -= movementX * LOOK_SPEED * mouseSensitivity;
-            camera.rotation.x -= movementY * LOOK_SPEED * mouseSensitivity;
-            camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
-        }
-    });
-    
-    var canvas = document.querySelector('#game-canvas');
-    if (canvas) {
-        canvas.addEventListener('click', function() {
-            this.requestPointerLock();
-        });
-    }
+  if (!window.RSG || !window.RSG.systems || !window.RSG.systems.input) {
+    console.warn("⚠️ Input system non disponibile (scripts/systems/input.js non caricato?)");
+    return;
+  }
 
-    // Click sinistro per sparare quando si ha la pistola in mano
-    // (rimosso: ora si spara con Q)
+  // Allinea state con le variabili legacy prima di inizializzare
+  if (state && state.input) {
+    state.input.moveForward = !!moveForward;
+    state.input.moveBackward = !!moveBackward;
+    state.input.moveLeft = !!moveLeft;
+    state.input.moveRight = !!moveRight;
+  }
+  if (state && state.player) {
+    state.player.canJump = !!canJump;
+    state.player.velocity = velocity;
+    state.player.hasGun = !!hasGun;
+    state.player.heldWeapon = heldWeapon;
+  }
+  if (state && state.settings) {
+    state.settings.mouseSensitivity = mouseSensitivity;
+  }
+  if (state && state.ui) {
+    state.ui.isUsingPC = !!isUsingPC;
+    state.ui.isInDialogue = !!isInDialogue;
+    state.ui.isInventoryOpen = !!isInventoryOpen;
+  }
+
+  window.RSG.systems.input.init({
+    state: state,
+    getCamera: function () {
+      return camera;
+    },
+    constants: {
+      LOOK_SPEED: LOOK_SPEED,
+      JUMP_VELOCITY: JUMP_VELOCITY,
+    },
+    actions: {
+      shoot: function () {
+        // Gate reload/weapon equip here to preserve existing behavior
+        if (equipped.rightHand && equipped.rightHand.type === "weapon" && !isReloading) {
+          shoot();
+        }
+      },
+      interact: function () {
+        if (window.RSG && window.RSG.systems && window.RSG.systems.interactions) {
+          window.RSG.systems.interactions.handleInteract();
+        } else {
+          handleInteract();
+        }
+      },
+      toggleInventory: function () {
+        toggleInventory();
+      },
+      reload: function () {
+        if (equipped.rightHand && equipped.rightHand.type === "weapon" && !isReloading) {
+          beginReload();
+        }
+      },
+      closePC: function () {
+        if (window.RSG && window.RSG.systems && window.RSG.systems.interactions) {
+          window.RSG.systems.interactions.closePC();
+        } else {
+          closePC();
+        }
+      },
+      closeDialogue: function () {
+        if (window.RSG && window.RSG.systems && window.RSG.systems.interactions) {
+          window.RSG.systems.interactions.closeDialogue();
+        } else {
+          closeDialogue();
+        }
+      },
+    },
+  });
 }
 
 function updateMovement(delta) {
-    if (isUsingPC || isInDialogue) {
-        return;
-    }
-    velocity.y -= GRAVITY * delta;
+  if (!isGameplayMode()) return;
+  velocity.y -= GRAVITY * delta;
 
-    var forward = new THREE.Vector3(0, 0, -1);
-    forward.applyQuaternion(camera.quaternion);
-    forward.y = 0;
-    forward.normalize();
+  // Input: da questo punto in poi lo stato è la sorgente di verità (input system aggiorna state.input)
+  // Manteniamo anche i flag legacy sincronizzati durante la transizione.
+  if (state && state.input) {
+    moveForward = !!state.input.moveForward;
+    moveBackward = !!state.input.moveBackward;
+    moveLeft = !!state.input.moveLeft;
+    moveRight = !!state.input.moveRight;
+  }
 
-    var right = new THREE.Vector3(1, 0, 0);
-    right.applyQuaternion(camera.quaternion);
-    right.y = 0;
-    right.normalize();
+  var forward = new THREE.Vector3(0, 0, -1);
+  forward.applyQuaternion(camera.quaternion);
+  forward.y = 0;
+  forward.normalize();
 
-    // Calcola nuova posizione proposta
-    var newPosition = camera.position.clone();
-    if (moveForward) newPosition.addScaledVector(forward, MOVE_SPEED * delta);
-    if (moveBackward) newPosition.addScaledVector(forward, -MOVE_SPEED * delta);
-    if (moveLeft) newPosition.addScaledVector(right, -MOVE_SPEED * delta);
-    if (moveRight) newPosition.addScaledVector(right, MOVE_SPEED * delta);
+  var right = new THREE.Vector3(1, 0, 0);
+  right.applyQuaternion(camera.quaternion);
+  right.y = 0;
+  right.normalize();
 
-    // Risolvi le collisioni orizzontali con gli oggetti 3D
-    newPosition = resolveCollisions(newPosition);
+  // Calcola nuova posizione proposta
+  var newPosition = camera.position.clone();
+  if (moveForward) newPosition.addScaledVector(forward, MOVE_SPEED * delta);
+  if (moveBackward) newPosition.addScaledVector(forward, -MOVE_SPEED * delta);
+  if (moveLeft) newPosition.addScaledVector(right, -MOVE_SPEED * delta);
+  if (moveRight) newPosition.addScaledVector(right, MOVE_SPEED * delta);
 
-    camera.position.x = newPosition.x;
-    camera.position.z = newPosition.z;
+  // Risolvi le collisioni orizzontali con gli oggetti 3D
+  newPosition = resolveCollisions(newPosition);
 
-    // Gestione asse verticale (salto / gravità)
-    camera.position.y += velocity.y * delta;
-    
-    if (camera.position.y <= PLAYER_HEIGHT) {
-        camera.position.y = PLAYER_HEIGHT;
-        velocity.y = 0;
-        canJump = true;
-    }
-    
-    camera.position.x = Math.max(-95, Math.min(95, camera.position.x));
-    camera.position.z = Math.max(-95, Math.min(95, camera.position.z));
+  camera.position.x = newPosition.x;
+  camera.position.z = newPosition.z;
+
+  // Gestione asse verticale (salto / gravità)
+  camera.position.y += velocity.y * delta;
+
+  if (camera.position.y <= PLAYER_HEIGHT) {
+    camera.position.y = PLAYER_HEIGHT;
+    velocity.y = 0;
+    canJump = true;
+  }
+
+  camera.position.x = Math.max(-95, Math.min(95, camera.position.x));
+  camera.position.z = Math.max(-95, Math.min(95, camera.position.z));
 }
 
 function resolveCollisions(newPosition) {
-    if (!collisionObjects.length) return newPosition;
+  if (!collisionObjects.length) return newPosition;
 
-    var corrected = newPosition.clone();
+  var corrected = newPosition.clone();
 
-    collisionObjects.forEach(function(obj) {
-        if (!obj.model || typeof obj.radius !== 'number') return;
+  collisionObjects.forEach(function (obj) {
+    if (!obj.model || typeof obj.radius !== "number") return;
 
-        var objPos = obj.model.position;
-        var dx = corrected.x - objPos.x;
-        var dz = corrected.z - objPos.z;
-        var dist = Math.sqrt(dx * dx + dz * dz);
-        var minDist = (obj.radius || 0) + PLAYER_RADIUS;
+    var objPos = obj.model.position;
+    var dx = corrected.x - objPos.x;
+    var dz = corrected.z - objPos.z;
+    var dist = Math.sqrt(dx * dx + dz * dz);
+    var minDist = (obj.radius || 0) + PLAYER_RADIUS;
 
-        if (dist > 0 && dist < minDist) {
-            var overlap = minDist - dist;
-            var nx = dx / dist;
-            var nz = dz / dist;
-            corrected.x += nx * overlap;
-            corrected.z += nz * overlap;
-        }
-    });
+    if (dist > 0 && dist < minDist) {
+      var overlap = minDist - dist;
+      var nx = dx / dist;
+      var nz = dz / dist;
+      corrected.x += nx * overlap;
+      corrected.z += nz * overlap;
+    }
+  });
 
-    return corrected;
+  return corrected;
 }
 
 function updateBullets(delta) {
-    if (!bullets.length || !scene) return;
+  if (!bullets.length || !scene) return;
 
-    var toRemove = [];
+  var toRemove = [];
 
-    bullets.forEach(function(bullet, index) {
-        if (bullet.stopped) return; // già fermo: buco nella superficie
+  bullets.forEach(function (bullet, index) {
+    if (bullet.stopped) return; // già fermo: buco nella superficie
 
-        var prevPos = bullet.mesh.position.clone();
-        var dir = bullet.direction;
-        var travel = BULLET_SPEED * delta;
-        if (travel <= 0) return;
+    var prevPos = bullet.mesh.position.clone();
+    var dir = bullet.direction;
+    var travel = BULLET_SPEED * delta;
+    if (travel <= 0) return;
 
-        if (bullet.remainingDistance <= 0) {
-            // è andato troppo lontano, rimuovilo
-            if (bullet.mesh.parent) {
-                bullet.mesh.parent.remove(bullet.mesh);
-            }
-            toRemove.push(index);
-            return;
-        }
-
-        if (travel > bullet.remainingDistance) {
-            travel = bullet.remainingDistance;
-        }
-
-        var newPos = prevPos.clone().addScaledVector(dir, travel);
-
-        // Raycast tra la posizione precedente e quella nuova
-        var raycaster = new THREE.Raycaster(prevPos, dir.clone(), 0, travel);
-
-        var targets = [];
-        if (models.length) targets = targets.concat(models);
-        if (staticTargets.length) targets = targets.concat(staticTargets);
-
-        var intersects = targets.length ? raycaster.intersectObjects(targets, true) : [];
-
-        if (intersects.length > 0) {
-            var hit = intersects[0];
-            var hitPoint = hit.point.clone();
-
-            // Trova il modello "root" colpito
-            var root = hit.object;
-            while (root.parent && root.parent !== scene) {
-                root = root.parent;
-            }
-
-            var cat = root.userData ? root.userData.category : null;
-
-            if (cat === 'animal') {
-                // Cerca l'animale corrispondente e uccidilo
-                movingAnimals.forEach(function(animal) {
-                    if (animal.model === root && animal.alive) {
-                        console.log('🎯 Colpito un animale!');
-                        animal.alive = false;
-                        animal.speed = 0;
-                        animal.verticalSpeed = 0;
-                    }
-                });
-            } else if (cat === 'character') {
-                // Cerca il personaggio e rimuovilo
-                for (var i = 0; i < characters.length; i++) {
-                    if (characters[i].model === root) {
-                        console.log('💥 Colpito un personaggio!');
-                        if (root.parent) {
-                            root.parent.remove(root);
-                        }
-                        characters.splice(i, 1);
-                        break;
-                    }
-                }
-            }
-
-            // Ferma il proiettile nel punto di impatto (diventa un buco permanente)
-            bullet.mesh.position.copy(hitPoint);
-            bullet.stopped = true;
-        } else {
-            // Nessun impatto: continua a volare
-            bullet.mesh.position.copy(newPos);
-            bullet.remainingDistance -= travel;
-
-            if (bullet.remainingDistance <= 0) {
-                if (bullet.mesh.parent) {
-                    bullet.mesh.parent.remove(bullet.mesh);
-                }
-                toRemove.push(index);
-            }
-        }
-    });
-
-    // Rimuovi i proiettili andati troppo lontano
-    if (toRemove.length) {
-        for (var i = toRemove.length - 1; i >= 0; i--) {
-            bullets.splice(toRemove[i], 1);
-        }
+    if (bullet.remainingDistance <= 0) {
+      // è andato troppo lontano, rimuovilo
+      if (bullet.mesh.parent) {
+        bullet.mesh.parent.remove(bullet.mesh);
+      }
+      toRemove.push(index);
+      return;
     }
+
+    if (travel > bullet.remainingDistance) {
+      travel = bullet.remainingDistance;
+    }
+
+    var newPos = prevPos.clone().addScaledVector(dir, travel);
+
+    // Raycast tra la posizione precedente e quella nuova
+    var raycaster = new THREE.Raycaster(prevPos, dir.clone(), 0, travel);
+
+    var targets = [];
+    if (models.length) targets = targets.concat(models);
+    if (staticTargets.length) targets = targets.concat(staticTargets);
+
+    var intersects = targets.length ? raycaster.intersectObjects(targets, true) : [];
+
+    if (intersects.length > 0) {
+      var hit = intersects[0];
+      var hitPoint = hit.point.clone();
+
+      // Trova il modello "root" colpito
+      var root = hit.object;
+      while (root.parent && root.parent !== scene) {
+        root = root.parent;
+      }
+
+      var cat = root.userData ? root.userData.category : null;
+
+      if (cat === "animal") {
+        // Cerca l'animale corrispondente e uccidilo
+        movingAnimals.forEach(function (animal) {
+          if (animal.model === root && animal.alive) {
+            console.log("🎯 Colpito un animale!");
+            animal.alive = false;
+            animal.speed = 0;
+            animal.verticalSpeed = 0;
+          }
+        });
+      } else if (cat === "character") {
+        // Cerca il personaggio e rimuovilo
+        for (var i = 0; i < characters.length; i++) {
+          if (characters[i].model === root) {
+            console.log("💥 Colpito un personaggio!");
+            if (root.parent) {
+              root.parent.remove(root);
+            }
+            characters.splice(i, 1);
+            break;
+          }
+        }
+      }
+
+      // Ferma il proiettile nel punto di impatto (diventa un buco permanente)
+      bullet.mesh.position.copy(hitPoint);
+      bullet.stopped = true;
+    } else {
+      // Nessun impatto: continua a volare
+      bullet.mesh.position.copy(newPos);
+      bullet.remainingDistance -= travel;
+
+      if (bullet.remainingDistance <= 0) {
+        if (bullet.mesh.parent) {
+          bullet.mesh.parent.remove(bullet.mesh);
+        }
+        toRemove.push(index);
+      }
+    }
+  });
+
+  // Rimuovi i proiettili andati troppo lontano
+  if (toRemove.length) {
+    for (var i = toRemove.length - 1; i >= 0; i--) {
+      bullets.splice(toRemove[i], 1);
+    }
+  }
 }
 
 function updateAnimals(delta) {
-    if (!movingAnimals.length) return;
+  if (window.RSG && window.RSG.systems && window.RSG.systems.ai) {
+    // delegato al sistema AI
+    return;
+  }
+  if (!movingAnimals.length) return;
 
-    movingAnimals.forEach(function(animal) {
-        if (animal.alive) {
-            // Movimento circolare finché è vivo
-            animal.angle += animal.speed * delta;
-            animal.model.position.x = animal.center.x + Math.cos(animal.angle) * animal.radius;
-            animal.model.position.z = animal.center.z + Math.sin(animal.angle) * animal.radius;
-            if (animal.model.position.y < 0) animal.model.position.y = 0;
-        } else {
-            // Animale colpito: cade a terra e rimane lì
-            if (!animal.hasLanded) {
-                animal.verticalSpeed -= GRAVITY * delta;
-                animal.model.position.y += animal.verticalSpeed * delta;
+  movingAnimals.forEach(function (animal) {
+    if (animal.alive) {
+      // Movimento circolare finché è vivo
+      animal.angle += animal.speed * delta;
+      animal.model.position.x = animal.center.x + Math.cos(animal.angle) * animal.radius;
+      animal.model.position.z = animal.center.z + Math.sin(animal.angle) * animal.radius;
+      if (animal.model.position.y < 0) animal.model.position.y = 0;
+    } else {
+      // Animale colpito: cade a terra e rimane lì
+      if (!animal.hasLanded) {
+        animal.verticalSpeed -= GRAVITY * delta;
+        animal.model.position.y += animal.verticalSpeed * delta;
 
-                // Ruota lentamente su un fianco mentre cade
-                animal.model.rotation.z = Math.min(Math.PI / 2, animal.model.rotation.z + 1.5 * delta);
+        // Ruota lentamente su un fianco mentre cade
+        animal.model.rotation.z = Math.min(Math.PI / 2, animal.model.rotation.z + 1.5 * delta);
 
-                if (animal.model.position.y <= 0) {
-                    animal.model.position.y = 0;
-                    animal.verticalSpeed = 0;
-                    animal.hasLanded = true;
-                }
-            }
+        if (animal.model.position.y <= 0) {
+          animal.model.position.y = 0;
+          animal.verticalSpeed = 0;
+          animal.hasLanded = true;
         }
-    });
+      }
+    }
+  });
 }
 
 function updateRobot(delta) {
-    if (!robotData || !robotData.model) return;
+  if (window.RSG && window.RSG.systems && window.RSG.systems.ai) {
+    // delegato al sistema AI
+    return;
+  }
+  if (!robotData || !robotData.model) return;
 
-    // Se il robottino deve seguire il giocatore
-    if (robotData.followPlayer && camera) {
-        var target = new THREE.Vector3(camera.position.x, robotData.model.position.y, camera.position.z);
-        var direction = target.clone().sub(robotData.model.position);
-        var distance = direction.length();
-        if (distance > 1.2) {
-            direction.normalize();
-            robotData.model.position.addScaledVector(direction, robotData.speed * delta);
-            robotData.model.lookAt(target);
-        }
+  // Se il robottino deve seguire il giocatore
+  if (robotData.followPlayer && camera) {
+    var target = new THREE.Vector3(camera.position.x, robotData.model.position.y, camera.position.z);
+    var direction = target.clone().sub(robotData.model.position);
+    var distance = direction.length();
+    if (distance > 1.2) {
+      direction.normalize();
+      robotData.model.position.addScaledVector(direction, robotData.speed * delta);
+      robotData.model.lookAt(target);
     }
+  }
 }
 
 function animate() {
-    if (!isGameRunning) return;
+  if (!isGameRunning) return;
 
-    requestAnimationFrame(animate);
+  requestAnimationFrame(animate);
 
-    var currentTime = performance.now();
-    var delta = (currentTime - lastTime) / 1000;
-    lastTime = currentTime;
-
+  var currentTime = performance.now();
+  var delta = (currentTime - lastTime) / 1000;
+  lastTime = currentTime;
+  if (state && state.combat) {
+    isReloading = !!state.combat.isReloading;
+  }
+  if (window.RSG && window.RSG.systems && window.RSG.systems.movement) {
+    window.RSG.systems.movement.update(delta);
+  } else {
     updateMovement(delta);
+  }
+  if (window.RSG && window.RSG.systems && window.RSG.systems.ai) {
+    window.RSG.systems.ai.update(delta);
+  } else {
     updateAnimals(delta);
     updateRobot(delta);
+  }
+
+  if (window.RSG && window.RSG.systems && window.RSG.systems.interactions) {
+    window.RSG.systems.interactions.updatePrompts();
+  } else {
     updateInteractPrompt();
     updateShootPrompt();
-    updateBullets(delta);
+  }
+  updateBullets(delta);
 
-    if (renderer && scene && camera) {
-        renderer.render(scene, camera);
-    }
+  if (renderer && scene && camera) {
+    renderer.render(scene, camera);
+  }
 }
 
 function updateInteractPrompt() {
-    var prompt = document.getElementById('interact-prompt');
-    if (!prompt) return;
+  if (window.RSG && window.RSG.systems && window.RSG.systems.interactions) {
+    // delegato al sistema interazioni
+    return;
+  }
+  if (!window.RSG || !window.RSG.ui || !window.RSG.ui.hud) return;
 
-    if (isUsingPC || isInDialogue) {
-        prompt.style.display = 'none';
-        return;
-    }
+  if (!isGameplayMode()) {
+    window.RSG.ui.hud.setInteractPromptVisible(false);
+    return;
+  }
 
-    var target = getNearestInteractable();
-    if (!target) {
-        prompt.style.display = 'none';
-        return;
-    }
+  var target = getNearestInteractable();
+  if (!target) {
+    window.RSG.ui.hud.setInteractPromptVisible(false);
+    return;
+  }
 
-    var text = 'E - Interagisci';
-    if (target.id === 'pc_laptop') {
-        text = 'E - Usa PC';
-    } else if (target.id === 'pistol_beretta' || target.id === 'pistol_43') {
-        text = 'E - Raccogli pistola';
-    } else if (target.type === 'robot') {
-        text = 'E - Parla con il robottino';
-    }
+  var text = "E - Interagisci";
+  if (target.id === "pc_laptop") {
+    text = "E - Usa PC";
+  } else if (target.id === "pistol_beretta" || target.id === "pistol_43") {
+    text = "E - Raccogli pistola";
+  } else if (target.type === "robot") {
+    text = "E - Parla con il robottino";
+  }
 
-    prompt.textContent = text;
-    prompt.style.display = 'block';
+  window.RSG.ui.hud.setInteractPromptVisible(true, text);
 }
 
 function updateShootPrompt() {
-    var prompt = document.getElementById('shoot-prompt');
-    if (!prompt) return;
-
-    if (hasGun && !isUsingPC && !isInDialogue && document.pointerLockElement) {
-        prompt.style.display = 'block';
-    } else {
-        prompt.style.display = 'none';
-    }
+  if (window.RSG && window.RSG.systems && window.RSG.systems.interactions) {
+    // delegato al sistema interazioni
+    return;
+  }
+  if (!window.RSG || !window.RSG.ui || !window.RSG.ui.hud) return;
+  var visible = hasGun && isGameplayMode() && document.pointerLockElement;
+  window.RSG.ui.hud.setShootPromptVisible(!!visible);
 }
 
 function getNearestInteractable() {
-    if (!interactables.length || !camera) return null;
-    var nearest = null;
-    var minDist = INTERACT_DISTANCE;
-    var camPos = camera.position;
+  if (window.RSG && window.RSG.systems && window.RSG.systems.interactions) {
+    // delegato al sistema interazioni
+    return null;
+  }
+  if (!interactables.length || !camera) return null;
+  var nearest = null;
+  var minDist = INTERACT_DISTANCE;
+  var camPos = camera.position;
 
-    interactables.forEach(function(obj) {
-        if (!obj.model) return;
-        var dist = camPos.distanceTo(obj.model.position);
-        if (dist < minDist) {
-            minDist = dist;
-            nearest = obj;
-        }
-    });
-    return nearest;
+  interactables.forEach(function (obj) {
+    if (!obj.model) return;
+    var dist = camPos.distanceTo(obj.model.position);
+    if (dist < minDist) {
+      minDist = dist;
+      nearest = obj;
+    }
+  });
+  return nearest;
 }
 
 function handleInteract() {
-    if (isUsingPC || isInDialogue) return;
-    var target = getNearestInteractable();
-    if (!target) return;
+  if (window.RSG && window.RSG.systems && window.RSG.systems.interactions) {
+    window.RSG.systems.interactions.handleInteract();
+    return;
+  }
+  if (!isGameplayMode()) return;
+  var target = getNearestInteractable();
+  if (!target) return;
 
-    if (target.id === 'pc_laptop') {
-        usePC();
-    } else if (target.id === 'pistol_beretta' || target.id === 'pistol_43') {
-        pickupGun(target);
-    } else if (target.type === 'robot') {
-        startDialogue();
-    }
+  if (target.id === "pc_laptop") {
+    usePC();
+  } else if (target.id === "pistol_beretta" || target.id === "pistol_43") {
+    pickupGun(target);
+  } else if (target.type === "robot") {
+    startDialogue();
+  }
 }
 
 function pickupGun(target) {
-    if (!camera) return;
-    if (!target || !target.model) return;
+  if (!camera) return;
+  if (!target || !target.model) return;
 
-    // Rimuovi la pistola dal mondo
-    if (target.model.parent) {
-        target.model.parent.remove(target.model);
-    }
+  // Rimuovi la pistola dal mondo
+  if (target.model.parent) {
+    target.model.parent.remove(target.model);
+  }
 
-    // Aggiungi all'inventario (se spazio)
-    var itemId = target.id || 'pistol';
-    var itemName = (itemId === 'pistol_beretta') ? 'Pistola Beretta' : (itemId === 'pistol_43' ? 'Pistola 43 Tactical' : 'Pistola');
+  // Aggiungi all'inventario (se spazio)
+  var itemId = target.id || "pistol";
+  var itemName = itemId === "pistol_beretta" ? "Pistola Beretta" : itemId === "pistol_43" ? "Pistola 43 Tactical" : "Pistola";
+  if (inventory.length < MAX_INVENTORY) {
+    var weaponItem = {
+      id: itemId,
+      name: itemName,
+      type: "weapon",
+      modelRef: target.model,
+    };
+    inventory.push(weaponItem);
+    updateInventoryUI();
+  } else {
+    // Se pieno, scarta a terra (non ri-aggiungiamo alla scena per semplicità)
+    console.warn("Inventario pieno: impossibile aggiungere pistola.");
+  }
+
+  // Aggiungi anche munizioni
+  var ammoId = itemId === "pistol_beretta" || itemId === "pistol_43" ? "pistol_ammo" : "pistol_ammo";
+  var existingAmmo = inventory.find(function (x) {
+    return x.id === ammoId;
+  });
+  if (existingAmmo) {
+    existingAmmo.amount = (existingAmmo.amount || 0) + 30; // +30 munizioni
+  } else {
     if (inventory.length < MAX_INVENTORY) {
-        var weaponItem = { 
-            id: itemId, 
-            name: itemName, 
-            type: 'weapon', 
-            modelRef: target.model 
-        };
-        inventory.push(weaponItem);
-        updateInventoryUI();
-    } else {
-        // Se pieno, scarta a terra (non ri-aggiungiamo alla scena per semplicità)
-        console.warn('Inventario pieno: impossibile aggiungere pistola.');
+      inventory.push({
+        id: ammoId,
+        name: "Munizioni 9mm",
+        type: "ammo",
+        amount: 30,
+      });
     }
+  }
 
-    // Aggiungi anche munizioni
-    var ammoId = (itemId === 'pistol_beretta' || itemId === 'pistol_43') ? 'pistol_ammo' : 'pistol_ammo';
-    var existingAmmo = inventory.find(function(x) { return x.id === ammoId; });
-    if (existingAmmo) {
-        existingAmmo.amount = (existingAmmo.amount || 0) + 30; // +30 munizioni
-    } else {
-        if (inventory.length < MAX_INVENTORY) {
-            inventory.push({ 
-                id: ammoId, 
-                name: 'Munizioni 9mm', 
-                type: 'ammo', 
-                amount: 30 
-            });
-        }
-    }
-
-    // Rimuovi dalle interazioni
-    interactables = interactables.filter(function(obj) {
-        return obj.id !== 'pistol_beretta' && obj.id !== 'pistol_43';
-    });
+  // Rimuovi dalle interazioni
+  interactables = interactables.filter(function (obj) {
+    return obj.id !== "pistol_beretta" && obj.id !== "pistol_43";
+  });
 }
 
 function shoot() {
-    // Effetto semplice di sparo: log + piccolo flash di luce
-    if (!equipped.rightHand || equipped.rightHand.type !== 'weapon') return;
-    
-    var weaponInfo = weaponData[equipped.rightHand.id];
-    if (!weaponInfo || weaponInfo.ammo <= 0) {
-        console.warn('Nessun proiettile disponibile!');
-        return;
-    }
+  if (window.RSG && window.RSG.systems && window.RSG.systems.projectiles) {
+    window.RSG.systems.projectiles.shoot();
+    return;
+  }
+  // Effetto semplice di sparo: log + piccolo flash di luce
+  if (!equipped.rightHand || equipped.rightHand.type !== "weapon") return;
 
-    console.log('🔫 SPARO! Colpi rimasti: ' + (weaponInfo.ammo - 1) + '/' + weaponInfo.ammoCapacity);
-    weaponInfo.ammo -= 1;
-    updateInventoryUI();
+  var weaponInfo = weaponData[equipped.rightHand.id];
+  if (!weaponInfo || weaponInfo.ammo <= 0) {
+    console.warn("Nessun proiettile disponibile!");
+    return;
+  }
 
-    if (!camera || !scene) return;
+  console.log("🔫 SPARO! Colpi rimasti: " + (weaponInfo.ammo - 1) + "/" + weaponInfo.ammoCapacity);
+  weaponInfo.ammo -= 1;
+  updateInventoryUI();
 
-    var flash = new THREE.PointLight(0xffaa00, 2, 5);
-    camera.add(flash);
-    flash.position.set(0.2, -0.1, -0.5);
+  if (!camera || !scene) return;
 
-    // Crea un proiettile che viaggia in avanti
-    var origin = new THREE.Vector3().copy(camera.position);
-    var direction = new THREE.Vector3(0, 0, -1);
-    direction.applyQuaternion(camera.quaternion).normalize();
+  var flash = new THREE.PointLight(0xffaa00, 2, 5);
+  camera.add(flash);
+  flash.position.set(0.2, -0.1, -0.5);
 
-    var bulletGeom = new THREE.SphereGeometry(0.08, 8, 8);
-    var bulletMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-    var bulletMesh = new THREE.Mesh(bulletGeom, bulletMat);
+  // Crea un proiettile che viaggia in avanti
+  var origin = new THREE.Vector3().copy(camera.position);
+  var direction = new THREE.Vector3(0, 0, -1);
+  direction.applyQuaternion(camera.quaternion).normalize();
 
-    // Posiziona il proiettile leggermente davanti alla camera
-    var startPos = origin.clone().addScaledVector(direction, 0.8);
-    bulletMesh.position.copy(startPos);
-    scene.add(bulletMesh);
+  var bulletGeom = new THREE.SphereGeometry(0.08, 8, 8);
+  var bulletMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+  var bulletMesh = new THREE.Mesh(bulletGeom, bulletMat);
 
-    bullets.push({
-        mesh: bulletMesh,
-        direction: direction.clone(),
-        remainingDistance: BULLET_MAX_DISTANCE,
-        stopped: false
-    });
-        }
+  // Posiziona il proiettile leggermente davanti alla camera
+  var startPos = origin.clone().addScaledVector(direction, 0.8);
+  bulletMesh.position.copy(startPos);
+  scene.add(bulletMesh);
+
+  bullets.push({
+    mesh: bulletMesh,
+    direction: direction.clone(),
+    remainingDistance: BULLET_MAX_DISTANCE,
+    stopped: false,
+  });
+}
 
 function spawnHitMarker(point) {
-    if (!scene || !point) return;
+  if (!scene || !point) return;
 
-    var geometry = new THREE.SphereGeometry(0.15, 10, 10);
-    var material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-    var marker = new THREE.Mesh(geometry, material);
-    marker.position.copy(point);
-    scene.add(marker);
+  var geometry = new THREE.SphereGeometry(0.15, 10, 10);
+  var material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+  var marker = new THREE.Mesh(geometry, material);
+  marker.position.copy(point);
+  scene.add(marker);
 }
 
 function toggleInventory() {
-    var overlay = document.getElementById('inventory-overlay');
-    if (!overlay) return;
-    isInventoryOpen = !isInventoryOpen;
-    overlay.style.display = isInventoryOpen ? 'flex' : 'none';
-    if (isInventoryOpen && document.pointerLockElement) {
-        document.exitPointerLock();
-    }
+  if (window.RSG && window.RSG.gameplay && window.RSG.gameplay.inventory) {
+    window.RSG.gameplay.inventory.toggleInventory();
+    isInventoryOpen = state.ui ? !!state.ui.isInventoryOpen : isInventoryOpen;
+    return;
+  }
+  // fallback legacy
+  isInventoryOpen = !isInventoryOpen;
+  if (window.RSG && window.RSG.ui && window.RSG.ui.inventory) {
+    window.RSG.ui.inventory.toggleOverlay(state, isInventoryOpen);
+  }
 }
 
 function updateInventoryUI() {
-    var grid = document.getElementById('inventory-items');
-    if (!grid) return;
-    grid.innerHTML = '';
-    // Mostra fino a MAX_INVENTORY celle
-    for (var i = 0; i < MAX_INVENTORY; i++) {
-        var cell = document.createElement('div');
-        cell.className = 'item-cell';
-        if (inventory[i]) {
-            cell.textContent = inventory[i].name;
-            (function(item){
-                cell.onclick = function(){
-                    // Mostra modal con dettagli, non equipaggia subito
-                    showItemDetail(item);
-                };
-            })(inventory[i]);
-        } else {
-            cell.textContent = '-';
-        }
-        grid.appendChild(cell);
-    }
-
-    // Aggiorna slot equip
-    var sh = document.getElementById('slot-head-item');
-    var sc = document.getElementById('slot-chest-item');
-    var sl = document.getElementById('slot-left-hand-item');
-    var sr = document.getElementById('slot-right-hand-item');
-    if (sh) sh.textContent = equipped.head ? equipped.head.name : '-';
-    if (sc) sc.textContent = equipped.chest ? equipped.chest.name : '-';
-    if (sl) sl.textContent = equipped.leftHand ? equipped.leftHand.name : '-';
-    if (sr) sr.textContent = equipped.rightHand ? equipped.rightHand.name : '-';
+  if (window.RSG && window.RSG.gameplay && window.RSG.gameplay.inventory) {
+    window.RSG.gameplay.inventory.render(function (item) {
+      showItemDetail(item);
+    });
+    return;
+  }
+  if (window.RSG && window.RSG.ui && window.RSG.ui.inventory) {
+    window.RSG.ui.inventory.render(state, function (item) {
+      showItemDetail(item);
+    });
+  }
 }
 
 function showItemDetail(item) {
-    currentDetailItem = item;
-    var modal = document.getElementById('item-detail-modal');
-    if (!modal) return;
+  currentDetailItem = item;
+  if (state && state.ui) state.ui.currentDetailItem = item;
 
-    // Aggiorna nome
-    var nameEl = document.getElementById('item-detail-name');
-    if (nameEl) nameEl.textContent = item.name;
+  if (window.RSG && window.RSG.gameplay && window.RSG.gameplay.inventory) {
+    window.RSG.gameplay.inventory.showItemDetail(item, weaponData, function (it) {
+      equipRightHand(it);
+    });
+    return;
+  }
 
-    // Aggiorna stats
-    var statsEl = document.getElementById('item-detail-stats');
-    if (statsEl) {
-        var statsHtml = '';
-        if (item.type === 'weapon') {
-            var weaponInfo = weaponData[item.id];
-            if (weaponInfo) {
-                statsHtml = '<strong>Arma</strong><br>';
-                statsHtml += 'Tipo: ' + weaponInfo.fireRate + '<br>';
-                statsHtml += 'Danno: ' + weaponInfo.damage + '<br>';
-                statsHtml += 'Caricatore: ' + weaponInfo.ammo + '/' + weaponInfo.ammoCapacity + '<br>';
-            }
-        } else if (item.type === 'ammo') {
-            statsHtml = '<strong>Munizioni</strong><br>';
-            statsHtml += 'Quantità: ' + (item.amount || 1);
-        }
-        statsEl.innerHTML = statsHtml || 'Nessun dato disponibile';
-    }
-
-    // Equip button handler
-    var equipBtn = document.getElementById('modal-equip-btn');
-    if (equipBtn) {
-        equipBtn.onclick = function() {
-            equipRightHand(item);
-            modal.style.display = 'none';
-        };
-    }
-
-    modal.style.display = 'flex';
-
-    // Close button
-    var closeBtn = document.getElementById('modal-close-btn');
-    if (closeBtn) {
-        closeBtn.onclick = function() {
-            modal.style.display = 'none';
-        };
-    }
+  if (window.RSG && window.RSG.ui && window.RSG.ui.inventory) {
+    window.RSG.ui.inventory.showItemDetail(item, weaponData, function (it) {
+      equipRightHand(it);
+    });
+  }
 }
 
 function equipRightHand(item) {
-    // Rimuovi item dall'inventario
-    var idx = inventory.findIndex(function(x){ return x === item; });
-    if (idx >= 0) {
-        inventory.splice(idx, 1);
-    }
+  if (window.RSG && window.RSG.gameplay && window.RSG.gameplay.inventory) {
+    window.RSG.gameplay.inventory.equipRightHand(item);
+    hasGun = state.player ? !!state.player.hasGun : hasGun;
+    heldWeapon = state.player && state.player.heldWeapon ? state.player.heldWeapon : heldWeapon;
+    return;
+  }
 
-    // Se c'è già qualcosa in mano destra, rimetti nell'inventario
-    if (equipped.rightHand) {
-        inventory.push(equipped.rightHand);
-        // Rimuovi il modello attuale dalla camera
-        if (equipped.rightHand.modelRef && equipped.rightHand.modelRef.parent === camera) {
-            camera.remove(equipped.rightHand.modelRef);
-        }
+  // fallback legacy
+  var idx = inventory.findIndex(function (x) {
+    return x === item;
+  });
+  if (idx >= 0) inventory.splice(idx, 1);
+  if (equipped.rightHand) {
+    inventory.push(equipped.rightHand);
+    if (equipped.rightHand.modelRef && equipped.rightHand.modelRef.parent === camera) {
+      camera.remove(equipped.rightHand.modelRef);
     }
-
-    equipped.rightHand = item;
-    updateInventoryUI();
-
-    // Se arma 3D, agganciala alla camera per vederla nella visuale
-    var model = item.modelRef;
-    if (model) {
-        camera.add(model);
-        // Posizione tipica arma in prima persona
-        model.position.set(0.6, -0.4, -0.9);
-        // Orienta la canna in avanti rispetto alla direzione dello sguardo
-        model.rotation.set(0, -Math.PI / 2, 0);
-        hasGun = true;
-        heldWeapon = model;
-    }
+  }
+  equipped.rightHand = item;
+  updateInventoryUI();
+  var model = item.modelRef;
+  if (model) {
+    camera.add(model);
+    model.position.set(0.6, -0.4, -0.9);
+    model.rotation.set(0, -Math.PI / 2, 0);
+    hasGun = true;
+    heldWeapon = model;
+    if (state && state.player) state.player.heldWeapon = heldWeapon;
+  }
 }
 
 // Semplice gestione salute
-var playerHealth = 100;
-function setPlayerHealth(value){
-    playerHealth = Math.max(0, Math.min(100, value));
-    var fill = document.getElementById('health-fill');
-    if (fill) {
-        fill.style.width = playerHealth + '%';
-        // Colore graduale
-        if (playerHealth < 35) {
-            fill.style.background = 'linear-gradient(90deg, #ff5b5b, #d63b3b)';
-        } else if (playerHealth < 70) {
-            fill.style.background = 'linear-gradient(90deg, #f3c24b, #e0a83a)';
-        } else {
-            fill.style.background = 'linear-gradient(90deg, #3bd16f, #1ea757)';
-        }
-    }
+var playerHealth = state.player.health;
+function setPlayerHealth(value) {
+  var v = value;
+  if (window.RSG && window.RSG.ui && window.RSG.ui.hud) {
+    v = window.RSG.ui.hud.setHealth(value);
+  } else {
+    v = Math.max(0, Math.min(100, value));
+  }
+
+  playerHealth = v;
+  if (state && state.player) state.player.health = v;
 }
 
 function beginReload() {
-    if (!equipped.rightHand || equipped.rightHand.type !== 'weapon') return;
-    var weaponInfo = weaponData[equipped.rightHand.id];
-    if (!weaponInfo) return;
+  if (window.RSG && window.RSG.systems && window.RSG.systems.projectiles) {
+    window.RSG.systems.projectiles.beginReload();
+    return;
+  }
+  if (!equipped.rightHand || equipped.rightHand.type !== "weapon") return;
+  var weaponInfo = weaponData[equipped.rightHand.id];
+  if (!weaponInfo) return;
 
-    // Cerco munizioni nel inventario
-    var ammoIdx = inventory.findIndex(function(x) {
-        return x.type === 'ammo' && x.id === weaponInfo.ammoType;
-    });
-    
-    if (ammoIdx < 0) {
-        console.warn('Nessuna munizione disponibile!');
-        return;
+  // Cerco munizioni nel inventario
+  var ammoIdx = inventory.findIndex(function (x) {
+    return x.type === "ammo" && x.id === weaponInfo.ammoType;
+  });
+
+  if (ammoIdx < 0) {
+    console.warn("Nessuna munizione disponibile!");
+    return;
+  }
+
+  var ammo = inventory[ammoIdx];
+  if (ammo.amount <= 0) {
+    console.warn("Munizione esaurita!");
+    return;
+  }
+
+  isReloading = true;
+  if (state && state.combat) state.combat.isReloading = true;
+  if (window.RSG && window.RSG.ui && window.RSG.ui.hud) {
+    window.RSG.ui.hud.setReloadBarVisible(true);
+  }
+
+  var startTime = performance.now();
+  var originalAmmo = weaponInfo.ammo;
+
+  function updateReload(currentTime) {
+    var elapsed = (currentTime - startTime) / 1000;
+    var progress = Math.min(elapsed / reloadDuration, 1);
+    if (window.RSG && window.RSG.ui && window.RSG.ui.hud) {
+      window.RSG.ui.hud.setReloadProgress(progress);
     }
 
-    var ammo = inventory[ammoIdx];
-    if (ammo.amount <= 0) {
-        console.warn('Munizione esaurita!');
-        return;
+    if (progress >= 1) {
+      // Reload completo
+      var ammoNeeded = weaponInfo.ammoCapacity - originalAmmo;
+      if (ammo.amount >= ammoNeeded) {
+        weaponInfo.ammo = weaponInfo.ammoCapacity;
+        ammo.amount -= ammoNeeded;
+      } else {
+        weaponInfo.ammo = originalAmmo + ammo.amount;
+        ammo.amount = 0;
+      }
+
+      if (ammo.amount <= 0) {
+        inventory.splice(ammoIdx, 1);
+      }
+
+      isReloading = false;
+      if (state && state.combat) state.combat.isReloading = false;
+      if (window.RSG && window.RSG.ui && window.RSG.ui.hud) {
+        window.RSG.ui.hud.setReloadBarVisible(false);
+        window.RSG.ui.hud.setReloadProgress(0);
+      }
+      updateInventoryUI();
+      console.log("✅ Arma ricaricata! Colpi: " + weaponInfo.ammo + "/" + weaponInfo.ammoCapacity);
+    } else {
+      requestAnimationFrame(updateReload);
     }
+  }
 
-    isReloading = true;
-    var reloadBar = document.getElementById('reload-bar');
-    if (reloadBar) reloadBar.style.display = 'block';
-
-    var startTime = performance.now();
-    var originalAmmo = weaponInfo.ammo;
-
-    function updateReload(currentTime) {
-        var elapsed = (currentTime - startTime) / 1000;
-        var progress = Math.min(elapsed / reloadDuration, 1);
-        var progressEl = document.getElementById('reload-progress');
-        if (progressEl) {
-            progressEl.style.width = (progress * 100) + '%';
-        }
-
-        if (progress >= 1) {
-            // Reload completo
-            var ammoNeeded = weaponInfo.ammoCapacity - originalAmmo;
-            if (ammo.amount >= ammoNeeded) {
-                weaponInfo.ammo = weaponInfo.ammoCapacity;
-                ammo.amount -= ammoNeeded;
-            } else {
-                weaponInfo.ammo = originalAmmo + ammo.amount;
-                ammo.amount = 0;
-            }
-
-            if (ammo.amount <= 0) {
-                inventory.splice(ammoIdx, 1);
-            }
-
-            isReloading = false;
-            reloadBar.style.display = 'none';
-            updateInventoryUI();
-            console.log('✅ Arma ricaricata! Colpi: ' + weaponInfo.ammo + '/' + weaponInfo.ammoCapacity);
-        } else {
-            requestAnimationFrame(updateReload);
-        }
-    }
-
-    requestAnimationFrame(updateReload);
+  requestAnimationFrame(updateReload);
 }
 
 // Inizializza UI inventario e salute all'avvio del gioco
-window.addEventListener('load', function(){
-    setPlayerHealth(100);
-    updateInventoryUI();
+window.addEventListener("load", function () {
+  setPlayerHealth(100);
+  updateInventoryUI();
 });
 
 function usePC() {
-    var pcScreen = document.getElementById('pc-screen');
-    if (!pcScreen || isUsingPC) return;
-
+  if (window.RSG && window.RSG.systems && window.RSG.systems.interactions) {
+    window.RSG.systems.interactions.usePC();
+    return;
+  }
+  if (window.RSG && window.RSG.ui && window.RSG.ui.pc) {
     isUsingPC = true;
-    pcScreen.style.display = 'flex';
-
-    // Mostra sezione di default
-    setActivePCSection('news');
-
-    // Attiva cambio sezione tramite i pulsanti
-    var navButtons = document.querySelectorAll('.pc-nav-btn');
-    navButtons.forEach(function(btn) {
-        btn.onclick = function() {
-            var section = btn.getAttribute('data-section');
-            setActivePCSection(section);
-        };
-    });
-
-    var closeBtn = document.getElementById('pc-close-btn');
-    if (closeBtn) {
-        closeBtn.onclick = function() {
-            closePC();
-        };
-    }
-
-    // Esci dal puntatore bloccato per usare il mouse normalmente
-    if (document.pointerLockElement) {
-        document.exitPointerLock();
-    }
+    if (state && state.ui) state.ui.isUsingPC = true;
+    window.RSG.ui.pc.open(state);
+  }
 }
 
 function closePC() {
-    var pcScreen = document.getElementById('pc-screen');
-    if (!pcScreen) return;
-    pcScreen.style.display = 'none';
-    isUsingPC = false;
+  if (window.RSG && window.RSG.systems && window.RSG.systems.interactions) {
+    window.RSG.systems.interactions.closePC();
+    return;
+  }
+  if (window.RSG && window.RSG.ui && window.RSG.ui.pc) {
+    window.RSG.ui.pc.close(state);
+  }
+  isUsingPC = false;
+  if (state && state.ui) state.ui.isUsingPC = false;
 }
 
 function setActivePCSection(sectionId) {
-    var sections = document.querySelectorAll('.pc-section');
-    sections.forEach(function(sec) {
-        sec.style.display = (sec.dataset.section === sectionId) ? 'block' : 'none';
-    });
+  if (window.RSG && window.RSG.systems && window.RSG.systems.interactions) {
+    window.RSG.systems.interactions.setActivePCSection(sectionId);
+    return;
+  }
+  if (window.RSG && window.RSG.ui && window.RSG.ui.pc) {
+    window.RSG.ui.pc.setActiveSection(sectionId);
+  }
 }
 
 function startDialogue() {
-    var dlg = document.getElementById('dialogue-ui');
-    if (!dlg || isInDialogue) return;
-
+  if (window.RSG && window.RSG.systems && window.RSG.systems.interactions) {
+    window.RSG.systems.interactions.startDialogue();
+    return;
+  }
+  if (window.RSG && window.RSG.ui && window.RSG.ui.dialogue) {
     isInDialogue = true;
-    dlg.style.display = 'flex';
-
-    // Primo testo
-    var textEl = document.getElementById('dialogue-text');
-    if (textEl) {
-        textEl.textContent = 'Ciao, sono il robottino guida. Vuoi che ti accompagni nella casa o preferisci esplorare da solo?';
-    }
-
-    var btn1 = document.getElementById('dialogue-option-1');
-    var btn2 = document.getElementById('dialogue-option-2');
-
-    if (btn1) {
-        btn1.textContent = 'Accompagnami e raccontami la storia.';
-        btn1.onclick = function() {
-            if (textEl) {
-                textEl.textContent = 'Perfetto! Ti seguirò e ti racconterò tutto man mano che esploriamo.';
-            }
-            if (robotData) {
-                robotData.followPlayer = true;
-            }
-        };
-    }
-
-    if (btn2) {
-        btn2.textContent = 'Preferisco esplorare da solo.';
-        btn2.onclick = function() {
-            if (textEl) {
-                textEl.textContent = 'Va bene! Io rimarrò in giro per casa, chiamami quando vuoi.';
-            }
-            if (robotData) {
-                robotData.followPlayer = false;
-            }
-        };
-    }
+    if (state && state.ui) state.ui.isInDialogue = true;
+    window.RSG.ui.dialogue.open(state, robotData);
+  }
 }
 
 function closeDialogue() {
-    var dlg = document.getElementById('dialogue-ui');
-    if (!dlg) return;
-    dlg.style.display = 'none';
-    isInDialogue = false;
+  if (window.RSG && window.RSG.systems && window.RSG.systems.interactions) {
+    window.RSG.systems.interactions.closeDialogue();
+    return;
+  }
+  if (window.RSG && window.RSG.ui && window.RSG.ui.dialogue) {
+    window.RSG.ui.dialogue.close(state);
+  }
+  isInDialogue = false;
+  if (state && state.ui) state.ui.isInDialogue = false;
 }
 
 function onWindowResize() {
-    var container = document.getElementById('game-canvas');
-    var width = container.clientWidth || window.innerWidth;
-    var height = container.clientHeight || window.innerHeight;
-    
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
-    renderer.setSize(width, height);
+  var container = document.getElementById("game-canvas");
+  var width = container.clientWidth || window.innerWidth;
+  var height = container.clientHeight || window.innerHeight;
+
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+  renderer.setSize(width, height);
 }
 
-window.updateMouseSensitivity = function(value) {
-    mouseSensitivity = value;
+window.updateMouseSensitivity = function (value) {
+  mouseSensitivity = value;
 };
 
-console.log('✅ game.js completamente caricato e pronto!');
+console.log("✅ game.js completamente caricato e pronto!");

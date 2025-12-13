@@ -1,183 +1,196 @@
 <!DOCTYPE html>
 <html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Shappa Games</title>
-    <link rel="stylesheet" href="styles/main.css">
-</head>
-<body>
+    <link rel="stylesheet" href="styles/main.css" />
+  </head>
+  <body>
     <div id="hub-menu" class="menu-container">
-        <div class="menu-content">
-            <div class="menu-buttons">
-                <button class="menu-btn" id="start-game-btn">AVVIA GIOCO</button>
-                <button class="menu-btn" id="select-game-btn">SELEZIONA GIOCO</button>
-            </div>
+      <div class="menu-content">
+        <div class="menu-buttons">
+          <button class="menu-btn" id="start-game-btn">AVVIA GIOCO</button>
+          <button class="menu-btn" id="select-game-btn">SELEZIONA GIOCO</button>
         </div>
+      </div>
     </div>
 
-    <div id="game-container" style="display: none;">
-        <div id="game-canvas"></div>
-        <div id="back-menu-btn" class="back-button">MENU</div>
-        <!-- Schermo PC interattivo -->
-        <div id="pc-screen" class="pc-screen" style="display: none;">
-            <div class="pc-shell">
-                <div class="pc-screen-area">
-                    <div class="pc-window">
-                        <div class="pc-header">
-                            <span class="pc-title">PC VIRTUALE</span>
-                            <button id="pc-close-btn" class="pc-close-btn">X</button>
-                        </div>
-                        <div class="pc-nav">
-                            <button class="pc-nav-btn" data-section="news">Notizie</button>
-                            <button class="pc-nav-btn" data-section="blog">Blog</button>
-                            <button class="pc-nav-btn" data-section="photos">Foto</button>
-                            <button class="pc-nav-btn" data-section="extra">Altro</button>
-                        </div>
-                        <div class="pc-content">
-                            <div class="pc-section" data-section="news">
-                                <h3>Notizie</h3>
-                                <ul>
-                                    <li>Ultime novità dal mondo Shappa.</li>
-                                    <li>Aggiornamenti sullo sviluppo del gioco.</li>
-                                    <li>Eventi speciali e missioni in arrivo.</li>
-                                </ul>
-                            </div>
-                            <div class="pc-section" data-section="blog" style="display:none;">
-                                <h3>Blog</h3>
-                                <p>Appunti di viaggio, idee e storie dall'universo Shappa.</p>
-                            </div>
-                            <div class="pc-section" data-section="photos" style="display:none;">
-                                <h3>Foto</h3>
-                                <p>Galleria fotografica (placeholder) dei momenti più belli.</p>
-                            </div>
-                            <div class="pc-section" data-section="extra" style="display:none;">
-                                <h3>Altro</h3>
-                                <p>Altre applicazioni e strumenti verranno aggiunti qui.</p>
-                            </div>
-                        </div>
-                    </div>
+    <div id="game-container" style="display: none">
+      <div id="game-canvas"></div>
+      <div id="back-menu-btn" class="back-button">MENU</div>
+      <!-- Schermo PC interattivo -->
+      <div id="pc-screen" class="pc-screen" style="display: none">
+        <div class="pc-shell">
+          <div class="pc-screen-area">
+            <div class="pc-window">
+              <div class="pc-header">
+                <span class="pc-title">PC VIRTUALE</span>
+                <button id="pc-close-btn" class="pc-close-btn">X</button>
+              </div>
+              <div class="pc-nav">
+                <button class="pc-nav-btn" data-section="news">Notizie</button>
+                <button class="pc-nav-btn" data-section="blog">Blog</button>
+                <button class="pc-nav-btn" data-section="photos">Foto</button>
+                <button class="pc-nav-btn" data-section="extra">Altro</button>
+              </div>
+              <div class="pc-content">
+                <div class="pc-section" data-section="news">
+                  <h3>Notizie</h3>
+                  <ul>
+                    <li>Ultime novità dal mondo Shappa.</li>
+                    <li>Aggiornamenti sullo sviluppo del gioco.</li>
+                    <li>Eventi speciali e missioni in arrivo.</li>
+                  </ul>
                 </div>
-            </div>
-        </div>
-
-        <!-- Dialogo robottino -->
-        <div id="dialogue-ui" class="dialogue-ui" style="display: none;">
-            <div class="dialogue-window">
-                <div id="dialogue-text" class="dialogue-text"></div>
-                <div class="dialogue-options">
-                    <button id="dialogue-option-1" class="dialogue-btn"></button>
-                    <button id="dialogue-option-2" class="dialogue-btn"></button>
+                <div class="pc-section" data-section="blog" style="display: none">
+                  <h3>Blog</h3>
+                  <p>Appunti di viaggio, idee e storie dall'universo Shappa.</p>
                 </div>
+                <div class="pc-section" data-section="photos" style="display: none">
+                  <h3>Foto</h3>
+                  <p>Galleria fotografica (placeholder) dei momenti più belli.</p>
+                </div>
+                <div class="pc-section" data-section="extra" style="display: none">
+                  <h3>Altro</h3>
+                  <p>Altre applicazioni e strumenti verranno aggiunti qui.</p>
+                </div>
+              </div>
             </div>
+          </div>
         </div>
+      </div>
 
-        <!-- Mirino al centro dello schermo -->
-        <div id="crosshair" class="crosshair">+</div>
+      <!-- Dialogo robottino -->
+      <div id="dialogue-ui" class="dialogue-ui" style="display: none">
+        <div class="dialogue-window">
+          <div id="dialogue-text" class="dialogue-text"></div>
+          <div class="dialogue-options">
+            <button id="dialogue-option-1" class="dialogue-btn"></button>
+            <button id="dialogue-option-2" class="dialogue-btn"></button>
+          </div>
+        </div>
+      </div>
 
-        <!-- Prompt interazione -->
-        <div id="interact-prompt" class="interact-prompt" style="display: none;">E - Interagisci</div>
+      <!-- Mirino al centro dello schermo -->
+      <div id="crosshair" class="crosshair">+</div>
 
-        <!-- Prompt sparo -->
-        <div id="shoot-prompt" class="shoot-prompt" style="display: none;">Q - Spara</div>
-        
-        <!-- HUD: inventory tip + health bar -->
-        <div class="hud hud-bottom-left"><span class="hud-tip">TAB - Apri inventario</span></div>
-        <div class="health-bar"><div id="health-fill" class="health-fill"></div></div>
+      <!-- Prompt interazione -->
+      <div id="interact-prompt" class="interact-prompt" style="display: none">E - Interagisci</div>
+
+      <!-- Prompt sparo -->
+      <div id="shoot-prompt" class="shoot-prompt" style="display: none">Q - Spara</div>
+
+      <!-- HUD: inventory tip + health bar -->
+      <div class="hud hud-bottom-left"><span class="hud-tip">TAB - Apri inventario</span></div>
+      <div class="health-bar"><div id="health-fill" class="health-fill"></div></div>
     </div>
 
-    <div id="select-game-menu" class="menu-container" style="display: none;">
-        <div class="menu-content">
-            <h2>SELEZIONA GIOCO</h2>
-            <div class="game-list">
-                <button class="game-item-btn">Gioco 3D - Esplorazione</button>
-            </div>
-            <button class="back-btn">INDIETRO</button>
+    <div id="select-game-menu" class="menu-container" style="display: none">
+      <div class="menu-content">
+        <h2>SELEZIONA GIOCO</h2>
+        <div class="game-list">
+          <button class="game-item-btn">Gioco 3D - Esplorazione</button>
         </div>
+        <button class="back-btn">INDIETRO</button>
+      </div>
     </div>
 
-    <div id="settings-menu" class="menu-container" style="display: none;">
-        <div class="menu-content">
-            <h2>IMPOSTAZIONI</h2>
-            <div class="settings-list">
-                <div class="setting-item">
-                    <label>Sensibilità Mouse:</label>
-                    <input type="range" id="mouse-sensitivity" min="0.1" max="2" step="0.1" value="1">
-                    <span id="sensitivity-value">1.0</span>
-                </div>
-                <div class="setting-item">
-                    <label>Volume:</label>
-                    <input type="range" id="volume" min="0" max="100" step="5" value="50">
-                    <span id="volume-value">50%</span>
-                </div>
-                <div class="setting-item">
-                    <label>Qualità Grafica:</label>
-                    <select id="graphics-quality">
-                        <option value="low">Bassa</option>
-                        <option value="medium" selected>Media</option>
-                        <option value="high">Alta</option>
-                    </select>
-                </div>
-            </div>
-            <button class="back-btn">INDIETRO</button>
+    <div id="settings-menu" class="menu-container" style="display: none">
+      <div class="menu-content">
+        <h2>IMPOSTAZIONI</h2>
+        <div class="settings-list">
+          <div class="setting-item">
+            <label>Sensibilità Mouse:</label>
+            <input type="range" id="mouse-sensitivity" min="0.1" max="2" step="0.1" value="1" />
+            <span id="sensitivity-value">1.0</span>
+          </div>
+          <div class="setting-item">
+            <label>Volume:</label>
+            <input type="range" id="volume" min="0" max="100" step="5" value="50" />
+            <span id="volume-value">50%</span>
+          </div>
+          <div class="setting-item">
+            <label>Qualità Grafica:</label>
+            <select id="graphics-quality">
+              <option value="low">Bassa</option>
+              <option value="medium" selected>Media</option>
+              <option value="high">Alta</option>
+            </select>
+          </div>
         </div>
+        <button class="back-btn">INDIETRO</button>
+      </div>
     </div>
 
     <!-- Inventory overlay -->
     <div id="inventory-overlay" class="inventory-overlay">
-        <div class="inventory-window">
-            <div class="equip-slots">
-                <div class="slot" id="slot-head">
-                    <div class="slot-title">Testa</div>
-                    <div class="slot-item" id="slot-head-item">-</div>
-                </div>
-                <div class="slot" id="slot-chest">
-                    <div class="slot-title">Petto</div>
-                    <div class="slot-item" id="slot-chest-item">-</div>
-                </div>
-                <div class="slot" id="slot-left-hand">
-                    <div class="slot-title">Mano sinistra</div>
-                    <div class="slot-item" id="slot-left-hand-item">-</div>
-                </div>
-                <div class="slot" id="slot-right-hand">
-                    <div class="slot-title">Mano destra</div>
-                    <div class="slot-item" id="slot-right-hand-item">-</div>
-                </div>
-            </div>
-            <div class="inventory-items" id="inventory-items">
-                <!-- Celle popolabili via JS (max 10) -->
-            </div>
+      <div class="inventory-window">
+        <div class="equip-slots">
+          <div class="slot" id="slot-head">
+            <div class="slot-title">Testa</div>
+            <div class="slot-item" id="slot-head-item">-</div>
+          </div>
+          <div class="slot" id="slot-chest">
+            <div class="slot-title">Petto</div>
+            <div class="slot-item" id="slot-chest-item">-</div>
+          </div>
+          <div class="slot" id="slot-left-hand">
+            <div class="slot-title">Mano sinistra</div>
+            <div class="slot-item" id="slot-left-hand-item">-</div>
+          </div>
+          <div class="slot" id="slot-right-hand">
+            <div class="slot-title">Mano destra</div>
+            <div class="slot-item" id="slot-right-hand-item">-</div>
+          </div>
         </div>
+        <div class="inventory-items" id="inventory-items">
+          <!-- Celle popolabili via JS (max 10) -->
+        </div>
+      </div>
     </div>
 
     <!-- Item detail modal -->
-    <div id="item-detail-modal" class="item-detail-modal" style="display: none;">
-        <div class="modal-content">
-            <button class="modal-close-btn" id="modal-close-btn">✕</button>
-            <div class="modal-preview">
-                <div id="item-3d-preview" class="item-3d-preview">
-                    <!-- 3D model preview will render here -->
-                </div>
-            </div>
-            <div class="modal-stats">
-                <h3 id="item-detail-name">Oggetto</h3>
-                <div id="item-detail-stats">
-                    <!-- Stats dinamiche -->
-                </div>
-                <button id="modal-equip-btn" class="modal-equip-btn">Equipaggia</button>
-            </div>
+    <div id="item-detail-modal" class="item-detail-modal" style="display: none">
+      <div class="modal-content">
+        <button class="modal-close-btn" id="modal-close-btn">✕</button>
+        <div class="modal-preview">
+          <div id="item-3d-preview" class="item-3d-preview">
+            <!-- 3D model preview will render here -->
+          </div>
         </div>
+        <div class="modal-stats">
+          <h3 id="item-detail-name">Oggetto</h3>
+          <div id="item-detail-stats">
+            <!-- Stats dinamiche -->
+          </div>
+          <button id="modal-equip-btn" class="modal-equip-btn">Equipaggia</button>
+        </div>
+      </div>
     </div>
 
     <!-- Reload bar HUD -->
-    <div id="reload-bar" class="reload-bar" style="display: none;">
-        <div id="reload-progress" class="reload-progress"></div>
-        <div class="reload-text">Ricarica...</div>
+    <div id="reload-bar" class="reload-bar" style="display: none">
+      <div id="reload-progress" class="reload-progress"></div>
+      <div class="reload-text">Ricarica...</div>
     </div>
 
     <script src="assets/libs/three.min.js"></script>
     <script src="assets/libs/GLTFLoader.js"></script>
+    <script src="scripts/gameplay/weapons.js"></script>
+    <script src="scripts/gameplay/inventory.js"></script>
+    <script src="scripts/content/models.js"></script>
+    <script src="scripts/ui/hud.js"></script>
+    <script src="scripts/ui/inventory-ui.js"></script>
+    <script src="scripts/ui/pc-ui.js"></script>
+    <script src="scripts/ui/dialogue-ui.js"></script>
+    <script src="scripts/systems/input.js"></script>
+    <script src="scripts/systems/movement.js"></script>
+    <script src="scripts/systems/model-loader.js"></script>
+    <script src="scripts/systems/projectiles.js"></script>
+    <script src="scripts/systems/interactions.js"></script>
+    <script src="scripts/systems/ai.js"></script>
     <script src="scripts/game.js"></script>
     <script src="scripts/menu.js"></script>
-</body>
+  </body>
 </html>

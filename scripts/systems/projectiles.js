@@ -67,6 +67,8 @@ window.RSG.systems = window.RSG.systems || {};
       direction: direction.clone(),
       remainingDistance: ctx.constants.BULLET_MAX_DISTANCE,
       stopped: false,
+      damage: weaponInfo.damage || 10,  // Danno dal'arma
+      weaponId: equipped.rightHand.id,
     });
   }
 
@@ -115,10 +117,14 @@ window.RSG.systems = window.RSG.systems || {};
 
         if (cat === "animal") {
           movingAnimals.forEach(function (animal) {
-            if (animal.model === root && animal.alive) {
-              animal.alive = false;
-              animal.speed = 0;
-              animal.verticalSpeed = 0;
+            if (animal.model === root) {
+              animal.health = (animal.health || 50) - (bullet.damage || 10);
+              console.log("🎯 Animale colpito! Danno:", bullet.damage, "Health rimanente:", animal.health);
+              if (animal.health <= 0) {
+                animal.alive = false;
+                animal.speed = 0;
+                animal.verticalSpeed = 0;
+              }
             }
           });
         } else if (cat === "character") {

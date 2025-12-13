@@ -4,6 +4,10 @@ console.log("📦 game.js caricato!");
 window.RSG = window.RSG || {};
 window.RSG.state = window.RSG.state || {};
 
+// ==================== ADVANCED EQUIPMENT SYSTEM GLOBALS ====================
+var inventoryUI = null; // Istanza di InventoryUI
+var equipmentManager = null; // Istanza di EquipmentManager
+
 function createInitialState() {
   return {
     // Modalità UI principale: riduce if-soup (per ora manteniamo anche i flag legacy)
@@ -56,6 +60,40 @@ function createInitialState() {
         leftHand: null,
         rightHand: null,
       },
+    },
+    // New advanced equipment system
+    playerInventory: (function() {
+      // Initialize from ItemRegistry if available
+      if (typeof window.ItemRegistry !== 'undefined' && window.ItemRegistry.getAllItems) {
+        // For demo: add first few items
+        var items = window.ItemRegistry.getAllItems().slice(0, 4);
+        return items.map(item => ({
+          id: item.id,
+          name: item.name,
+          type: item.type,
+          damage: item.damage || 0,
+          defense: item.defense || 0,
+          weight: item.weight,
+          rarity: item.rarity,
+          description: item.description,
+          modelFile: item.modelFile,
+          icon: item.icon
+        }));
+      }
+      // Fallback hardcoded items
+      return [
+        { id: 'pistol_beretta', name: 'Beretta 92FS', type: 'weapon', damage: 15, weight: 0.9, rarity: 'Common', description: 'Reliable sidearm', modelFile: 'models/pistol_beretta.glb' },
+        { id: 'rifle_ak47', name: 'AK-47', type: 'weapon', damage: 30, weight: 3.6, rarity: 'Uncommon', description: 'Powerful assault rifle', modelFile: 'models/rifle_ak47.glb' },
+      ];
+    })(),
+    equippedItems: {
+      'head': null,
+      'torso': null,
+      'left-hand': null,
+      'right-hand': null,
+      'back': null,
+      'legs': null,
+      'feet': null,
     },
     combat: {
       isReloading: false,
@@ -329,8 +367,13 @@ function setupMovementSystem() {
 }
 
 function setupInventorySystem() {
+  console.log("🔧 setupInventorySystem() chiamato");
+  console.log("📋 EquipmentManager disponibile?", typeof EquipmentManager !== 'undefined');
+  console.log("📋 InventoryUI disponibile?", typeof InventoryUI !== 'undefined');
+  console.log("📋 ItemRegistry disponibile?", typeof window.ItemRegistry !== 'undefined');
+
   if (!window.RSG || !window.RSG.gameplay || !window.RSG.gameplay.inventory) {
-    console.warn("⚠️ Inventory system non disponibile (scripts/gameplay/inventory.js non caricato?)");
+    console.warn("⚠️ Inventory system legacy non disponibile (scripts/gameplay/inventory.js non caricato?)");
     return;
   }
 
@@ -347,6 +390,37 @@ function setupInventorySystem() {
       if (state && state.player) state.player.heldWeapon = heldWeapon;
     },
   });
+
+  // ==================== ADVANCED EQUIPMENT SYSTEM ====================
+  // Initialize EquipmentManager (3D rendering)
+  if (typeof EquipmentManager !== 'undefined') {
+    // Usa la camera come riferimento di posizione per gli oggetti equipaggiati (prima persona)
+    equipmentManager = new EquipmentManager(scene, camera, camera || camera.parent || {
+      position: new THREE.Vector3()
+    });
+    
+    // Register all models from ItemRegistry
+    if (typeof window.ItemRegistry !== 'undefined') {
+      window.ItemRegistry.registerAllModels(equipmentManager);
+      console.log("✅ EquipmentManager inizializzato con modelli registrati");
+    } else {
+      console.warn("⚠️ ItemRegistry non disponibile (scripts/data/item-registry.js non caricato?)");
+    }
+    // Make available globally for debugging
+    window.debugEquipmentManager = equipmentManager;
+  } else {
+    console.warn("⚠️ EquipmentManager class non disponibile");
+  }
+
+  // Initialize InventoryUI (UI interactions)
+  if (typeof InventoryUI !== 'undefined') {
+    inventoryUI = new InventoryUI(state, equipmentManager);
+    console.log("✅ InventoryUI inizializzato");
+    // Make available globally for debugging
+    window.debugInventoryUI = inventoryUI;
+  } else {
+    console.warn("⚠️ InventoryUI class non disponibile");
+  }
 }
 
 function setupProjectilesSystem() {
@@ -938,6 +1012,11 @@ function animate() {
   }
   updateBullets(delta);
 
+  // Update equipped items (3D rendering)
+  if (equipmentManager) {
+    equipmentManager.updateAllEquipped();
+  }
+
   if (renderer && scene && camera) {
     renderer.render(scene, camera);
   }
@@ -1129,12 +1208,34 @@ function spawnHitMarker(point) {
 }
 
 function toggleInventory() {
+  // Usa il nuovo sistema di inventario avanzato
+  if (inventoryUI && typeof inventoryUI.toggle === 'function') {
+    console.log("🎯 Toggling InventoryUI...");
+    inventoryUI.toggle();
+
+    // Aggiorna stato UI e modalità
+    isInventoryOpen = !isInventoryOpen;
+    if (state && state.ui) {
+      state.ui.isInventoryOpen = isInventoryOpen;
+      state.mode = isInventoryOpen ? "inventory" : "gameplay";
+    }
+
+    // Esci dal pointer lock per mostrare il cursore quando l'inventario è aperto
+    if (isInventoryOpen && document.pointerLockElement) {
+      document.exitPointerLock();
+    }
+    return;
+  }
+  
+  // Fallback: sistemi legacy
   if (window.RSG && window.RSG.gameplay && window.RSG.gameplay.inventory) {
+    console.log("🎯 Toggling legacy inventory...");
     window.RSG.gameplay.inventory.toggleInventory();
     isInventoryOpen = state.ui ? !!state.ui.isInventoryOpen : isInventoryOpen;
     return;
   }
   // fallback legacy
+  console.warn("⚠️ No inventory system available!");
   isInventoryOpen = !isInventoryOpen;
   if (window.RSG && window.RSG.ui && window.RSG.ui.inventory) {
     window.RSG.ui.inventory.toggleOverlay(state, isInventoryOpen);

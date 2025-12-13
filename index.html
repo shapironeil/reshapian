@@ -20,7 +20,7 @@
       <div id="game-canvas"></div>
       <div id="back-menu-btn" class="back-button">MENU</div>
       <!-- Schermo PC interattivo -->
-      <div id="pc-screen" class="pc-screen" style="display: none">
+      <div id="pc-screen" class="pc-screen">
         <div class="pc-shell">
           <div class="pc-screen-area">
             <div class="pc-window">
@@ -123,50 +123,67 @@
       </div>
     </div>
 
-    <!-- Inventory overlay -->
-    <div id="inventory-overlay" class="inventory-overlay">
-      <div class="inventory-window">
-        <div class="equip-slots">
-          <div class="slot" id="slot-head">
-            <div class="slot-title">Testa</div>
-            <div class="slot-item" id="slot-head-item">-</div>
-          </div>
-          <div class="slot" id="slot-chest">
-            <div class="slot-title">Petto</div>
-            <div class="slot-item" id="slot-chest-item">-</div>
-          </div>
-          <div class="slot" id="slot-left-hand">
-            <div class="slot-title">Mano sinistra</div>
-            <div class="slot-item" id="slot-left-hand-item">-</div>
-          </div>
-          <div class="slot" id="slot-right-hand">
-            <div class="slot-title">Mano destra</div>
-            <div class="slot-item" id="slot-right-hand-item">-</div>
-          </div>
-        </div>
-        <div class="inventory-items" id="inventory-items">
-          <!-- Celle popolabili via JS (max 10) -->
-        </div>
-      </div>
-    </div>
+    <!-- Advanced Inventory Panel (TAB key) -->
+    <div id="inventory-panel" class="full-screen-overlay">
+      <div class="inventory-container">
+        
+        <!-- Left: Body Equipment Slots -->
+        <div class="inventory-left">
+          <h3>Equipment</h3>
+          <div class="body-diagram">
+            <!-- Humanoid body figure with slot overlays -->
+            <div class="body-figure-container">
+              <img src="assets/images/body-diagram.svg" alt="Body Diagram" class="body-figure"/>
+            </div>
 
-    <!-- Item detail modal -->
-    <div id="item-detail-modal" class="item-detail-modal" style="display: none">
-      <div class="modal-content">
-        <button class="modal-close-btn" id="modal-close-btn">✕</button>
-        <div class="modal-preview">
-          <div id="item-3d-preview" class="item-3d-preview">
-            <!-- 3D model preview will render here -->
+            <!-- Draggable equipment slots -->
+            <div class="equip-slot head" data-slot="head" draggable="false">
+              <div class="slot-icon"></div>
+            </div>
+            <div class="equip-slot torso" data-slot="torso" draggable="false">
+              <div class="slot-icon"></div>
+            </div>
+            <div class="equip-slot left-hand" data-slot="left-hand" draggable="false">
+              <div class="slot-icon"></div>
+            </div>
+            <div class="equip-slot right-hand" data-slot="right-hand" draggable="false">
+              <div class="slot-icon"></div>
+            </div>
+            <div class="equip-slot back" data-slot="back" draggable="false">
+              <div class="slot-icon"></div>
+            </div>
+            <div class="equip-slot legs" data-slot="legs" draggable="false">
+              <div class="slot-icon"></div>
+            </div>
+            <div class="equip-slot feet" data-slot="feet" draggable="false">
+              <div class="slot-icon"></div>
+            </div>
           </div>
         </div>
-        <div class="modal-stats">
-          <h3 id="item-detail-name">Oggetto</h3>
-          <div id="item-detail-stats">
-            <!-- Stats dinamiche -->
+        
+        <!-- Center: Item Grid -->
+        <div class="inventory-center">
+          <h3>Inventory</h3>
+          <div class="item-grid" id="item-grid">
+            <!-- Items render here dynamically -->
           </div>
-          <button id="modal-equip-btn" class="modal-equip-btn">Equipaggia</button>
         </div>
+        
+        <!-- Right: Item Stats Panel -->
+        <div class="inventory-right">
+          <h3>Item Stats</h3>
+          <div class="stats-panel" id="stats-panel">
+            <div class="stat-empty">Select an item</div>
+          </div>
+          <button id="equip-load-btn" class="load-btn" title="Equip selected item" disabled>
+            <img src="assets/icons/load.svg" alt="Load" style="width:20px;height:20px;">
+          </button>
+        </div>
+        
       </div>
+      
+      <!-- Close button -->
+      <button id="inventory-close-btn" class="close-btn">×</button>
     </div>
 
     <!-- Reload bar HUD -->
@@ -177,8 +194,10 @@
 
     <script src="assets/libs/three.min.js"></script>
     <script src="assets/libs/GLTFLoader.js"></script>
+    <script src="scripts/data/item-registry.js"></script>
     <script src="scripts/gameplay/weapons.js"></script>
     <script src="scripts/gameplay/inventory.js"></script>
+    <script src="scripts/gameplay/equipment-manager.js"></script>
     <script src="scripts/content/models.js"></script>
     <script src="scripts/ui/hud.js"></script>
     <script src="scripts/ui/inventory-ui.js"></script>

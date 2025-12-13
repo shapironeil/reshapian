@@ -1,0 +1,34 @@
+<svg width="80" height="80" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bladegradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color: rgb(200, 200, 210); stop-opacity: 1" />
+      <stop offset="50%" style="stop-color: rgb(240, 240, 245); stop-opacity: 1" />
+      <stop offset="100%" style="stop-color: rgb(180, 180, 190); stop-opacity: 1" />
+    </linearGradient>
+    <linearGradient id="handlegradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color: rgb(139, 69, 19); stop-opacity: 1" />
+      <stop offset="100%" style="stop-color: rgb(101, 50, 15); stop-opacity: 1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="80" height="80" fill="#1a1a2e" stroke="rgba(100, 150, 200, 0.8)" stroke-width="2"/>
+  
+  <!-- Blade (long) -->
+  <polygon points="40,8 42,8 41,65 40,70 39,65 38,8" fill="url(#bladegradient)" stroke="#888" stroke-width="0.5"/>
+  
+  <!-- Blade edge highlight -->
+  <polygon points="40,10 40.5,10 40.5,65 40,70" fill="rgba(255, 255, 255, 0.6)"/>
+  
+  <!-- Cross-guard -->
+  <rect x="32" y="68" width="16" height="4" fill="#d4af37" stroke="#999" stroke-width="1" rx="1"/>
+  
+  <!-- Handle/Pommel -->
+  <rect x="35" y="72" width="10" height="12" fill="url(#handlegradient)" stroke="#666" stroke-width="1" rx="2"/>
+  
+  <!-- Pommel cap -->
+  <circle cx="40" cy="85" r="3" fill="#d4af37" stroke="#999" stroke-width="0.5"/>
+  
+  <!-- Ornamental center line on handle -->
+  <line x1="40" y1="72" x2="40" y2="83" stroke="#999" stroke-width="0.5" opacity="0.7"/>
+</svg>

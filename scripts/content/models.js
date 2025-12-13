@@ -15,16 +15,16 @@ window.RSG.content = window.RSG.content || {};
       { file: "vintage_tv_free.glb", pos: [0, 1, 0], rot: Math.PI, scale: 0.8, category: "furniture", area: "indoor" },
       { file: "chocolate_beech_bookshelf_free.glb", pos: [-8, 0, -4], rot: Math.PI / 2, scale: 1.0, category: "decor", area: "indoor" },
       { file: "dusty_old_bookshelf_free.glb", pos: [8, 0, -4], rot: -Math.PI / 2, scale: 1.0, category: "decor", area: "indoor" },
-      { file: "cowboy_hat_free.glb", pos: [-8, 1.6, -3.5], rot: 0, scale: 0.6, category: "decor", area: "indoor" },
+      { file: "cowboy_hat_free.glb", pos: [-8, 1.6, -3.5], rot: 0, scale: 0.15, category: "decor", area: "indoor" },
       { file: "blue_eyeball_free.glb", pos: [8, 1.4, -3.5], rot: 0, scale: 0.5, category: "decor", area: "indoor" },
 
       // --- INDOOR: study / work area ---
-      { file: "laptop_free.glb", pos: [10, 1.06, -5], rot: 0, scale: 0.25, category: "usable", area: "indoor", id: "pc_laptop" },
+      { file: "laptop_free.glb", pos: [10, 1.06, -5], rot: 0, scale: 0.35, category: "usable", area: "indoor", id: "pc_laptop" },
       {
         file: "beretta_92fs_-_game_ready_-_free.glb",
         pos: [11, 1.08, -4.5],
-        rot: Math.PI / 2,
-        scale: 0.15,
+        rot: Math.PI / 2 + Math.PI,  // 180° vertical rotation
+        scale: 0.025,  // INCREASED: Much larger on table (0.015 → 0.025)
         category: "usable",
         area: "indoor",
         id: "pistol_beretta",
@@ -33,12 +33,12 @@ window.RSG.content = window.RSG.content || {};
         file: "pistol_43_tactical__free_lowpoly.glb",
         pos: [9, 1.08, -4.5],
         rot: Math.PI / 2,
-        scale: 0.15,
+        scale: 0.02,  // INCREASED: Much larger on table (0.012 → 0.02)
         category: "usable",
         area: "indoor",
         id: "pistol_43",
       },
-      { file: "paladin_longsword_free_download.glb", pos: [-12, 1.2, 4], rot: 0, scale: 0.8, category: "usable", area: "indoor" },
+      { file: "paladin_longsword_free_download.glb", pos: [-12, 1.2, 4], rot: 0, scale: 0.4, category: "usable", area: "indoor", id: "sword_longsword" },
       { file: "tools_pack._free.glb", pos: [-10, 0, 6], rot: 0, scale: 0.9, category: "usable", area: "indoor" },
 
       // --- INDOOR: characters ---

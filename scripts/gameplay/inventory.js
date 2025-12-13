@@ -83,8 +83,10 @@ window.RSG.gameplay = window.RSG.gameplay || {};
     var model = item && item.modelRef;
     if (cam2 && model) {
       cam2.add(model);
-      model.position.set(0.6, -0.4, -0.9);
-      model.rotation.set(0, -Math.PI / 2, 0);
+      // FPS STANDARD positioning: bottom-right with barrel forward (matches equipment-manager)
+      model.position.set(0.4, -0.45, -0.65);
+      model.rotation.set(-0.05, -0.1, 0.05);  // Natural tilt like CS:GO/CoD
+      model.scale.set(2.0, 2.0, 2.0);  // Match 2.0x scale from slotConfigs
     }
 
     if (ctx.onEquipWeapon) ctx.onEquipWeapon(item, model);

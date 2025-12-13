@@ -1,0 +1,21 @@
+<svg width="80" height="80" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad4" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color: rgb(80, 80, 120); stop-opacity: 1" />
+      <stop offset="100%" style="stop-color: rgb(40, 40, 60); stop-opacity: 1" />
+    </linearGradient>
+  </defs>
+  <rect width="80" height="80" fill="url(#grad4)" stroke="rgba(100, 120, 180, 0.8)" stroke-width="2"/>
+  <!-- Vest plates -->
+  <rect x="20" y="18" width="14" height="20" fill="#555" stroke="#333" stroke-width="1"/>
+  <rect x="46" y="18" width="14" height="20" fill="#555" stroke="#333" stroke-width="1"/>
+  <!-- Main vest body -->
+  <path d="M 20 38 Q 30 45 40 46 Q 50 45 60 38" fill="#666" stroke="#444" stroke-width="1"/>
+  <!-- Side panel -->
+  <rect x="15" y="35" width="4" height="15" fill="#777"/>
+  <!-- Strap -->
+  <rect x="25" y="58" width="30" height="2" fill="#555"/>
+  <!-- Pockets -->
+  <rect x="28" y="50" width="8" height="4" fill="#444"/>
+  <rect x="44" y="50" width="8" height="4" fill="#444"/>
+</svg>

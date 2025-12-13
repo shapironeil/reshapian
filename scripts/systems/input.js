@@ -49,19 +49,19 @@ window.RSG.systems = window.RSG.systems || {};
     function onKeyDown(event) {
       switch (event.code) {
         case "KeyW":
-          state.input.moveForward = true;
+          if (isGameplayMode()) state.input.moveForward = true;
           break;
         case "KeyS":
-          state.input.moveBackward = true;
+          if (isGameplayMode()) state.input.moveBackward = true;
           break;
         case "KeyA":
-          state.input.moveLeft = true;
+          if (isGameplayMode()) state.input.moveLeft = true;
           break;
         case "KeyD":
-          state.input.moveRight = true;
+          if (isGameplayMode()) state.input.moveRight = true;
           break;
         case "Space":
-          if (state.player.canJump) {
+          if (isGameplayMode() && state.player.canJump) {
             state.player.velocity.y = opts.constants.JUMP_VELOCITY;
             state.player.canJump = false;
           }
@@ -99,19 +99,40 @@ window.RSG.systems = window.RSG.systems || {};
     }
 
     function onKeyUp(event) {
-      switch (event.code) {
-        case "KeyW":
-          state.input.moveForward = false;
-          break;
-        case "KeyS":
-          state.input.moveBackward = false;
-          break;
-        case "KeyA":
-          state.input.moveLeft = false;
-          break;
-        case "KeyD":
-          state.input.moveRight = false;
-          break;
+      // Only reset movement keys if in gameplay mode to avoid stuck keys
+      if (!isGameplayMode()) {
+        // Still reset movement to prevent stuck keys after leaving PC mode
+        if (event.code === "KeyW" || event.code === "KeyS" || event.code === "KeyA" || event.code === "KeyD") {
+          switch (event.code) {
+            case "KeyW":
+              state.input.moveForward = false;
+              break;
+            case "KeyS":
+              state.input.moveBackward = false;
+              break;
+            case "KeyA":
+              state.input.moveLeft = false;
+              break;
+            case "KeyD":
+              state.input.moveRight = false;
+              break;
+          }
+        }
+      } else {
+        switch (event.code) {
+          case "KeyW":
+            state.input.moveForward = false;
+            break;
+          case "KeyS":
+            state.input.moveBackward = false;
+            break;
+          case "KeyA":
+            state.input.moveLeft = false;
+            break;
+          case "KeyD":
+            state.input.moveRight = false;
+            break;
+        }
       }
     }
 

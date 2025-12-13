@@ -31,7 +31,15 @@ window.RSG.systems = window.RSG.systems || {};
     var GRAVITY = ctx.constants.GRAVITY || 20;
 
     animals.forEach(function (animal) {
-      if (animal.alive) {
+      // Initialize health if not exists
+      if (typeof animal.health === 'undefined') {
+        animal.health = 50;  // Default health
+      }
+
+      // Animal dies when health reaches 0
+      var isAlive = animal.health > 0;
+      
+      if (isAlive) {
         animal.angle += animal.speed * delta;
         animal.model.position.x = animal.center.x + Math.cos(animal.angle) * animal.radius;
         animal.model.position.z = animal.center.z + Math.sin(animal.angle) * animal.radius;

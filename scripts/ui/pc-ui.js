@@ -14,26 +14,34 @@ window.RSG.ui = window.RSG.ui || {};
 
     pcScreen.style.display = "flex";
 
-    setActiveSection("news");
-
-    var navButtons = document.querySelectorAll(".pc-nav-btn");
-    navButtons.forEach(function (btn) {
-      btn.onclick = function () {
-        var section = btn.getAttribute("data-section");
-        setActiveSection(section);
-      };
-    });
-
-    var closeBtn = document.getElementById("pc-close-btn");
-    if (closeBtn) {
-      closeBtn.onclick = function () {
-        close(state);
-      };
+    // Exit pointer lock safely
+    try {
+      if (document.pointerLockElement) {
+        document.exitPointerLock();
+      }
+    } catch (e) {
+      console.warn("⚠️ Could not exit pointer lock:", e);
     }
 
-    if (document.pointerLockElement) {
-      document.exitPointerLock();
-    }
+    // Defer nav button setup to avoid blocking
+    setTimeout(function() {
+      setActiveSection("news");
+
+      var navButtons = document.querySelectorAll(".pc-nav-btn");
+      navButtons.forEach(function (btn) {
+        btn.onclick = function () {
+          var section = btn.getAttribute("data-section");
+          setActiveSection(section);
+        };
+      });
+
+      var closeBtn = document.getElementById("pc-close-btn");
+      if (closeBtn) {
+        closeBtn.onclick = function () {
+          close(state);
+        };
+      }
+    }, 50);
   }
 
   function close(state) {

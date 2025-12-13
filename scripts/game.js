@@ -34,6 +34,42 @@ var equipped = {
 };
 var isInventoryOpen = false;
 
+// Armi e munizioni
+var weaponData = {
+    'pistol_beretta': {
+        name: 'Pistola Beretta 92FS',
+        type: 'weapon',
+        category: 'pistola',
+        damage: 12,
+        fireRate: 'Semiautomatica',
+        ammoCapacity: 12,
+        ammo: 12,
+        ammotype: 'pistol_ammo'
+    },
+    'pistol_43': {
+        name: 'Pistola 43 Tactical',
+        type: 'weapon',
+        category: 'pistola',
+        damage: 14,
+        fireRate: 'Semiautomatica',
+        ammoCapacity: 15,
+        ammo: 15,
+        ammoType: 'pistol_ammo'
+    }
+};
+
+var ammotypes = {
+    'pistol_ammo': {
+        name: 'Munizioni 9mm',
+        type: 'ammo',
+        amount: 0 // tracciato per singolo stack
+    }
+};
+
+var isReloading = false;
+var reloadDuration = 2.5; // secondi
+var currentDetailItem = null;
+
 // Costanti
 var PLAYER_HEIGHT = 1.7;
 var MOVE_SPEED = 10.0;
@@ -478,6 +514,11 @@ function setupControls() {
                 event.preventDefault();
                 toggleInventory();
                 break;
+            case 'KeyR':
+                if (equipped.rightHand && equipped.rightHand.type === 'weapon' && !isReloading && !isUsingPC && !isInDialogue) {
+                    beginReload();
+                }
+                break;
             case 'Escape':
                 if (isUsingPC) {
                     closePC();
@@ -842,11 +883,33 @@ function pickupGun(target) {
     var itemId = target.id || 'pistol';
     var itemName = (itemId === 'pistol_beretta') ? 'Pistola Beretta' : (itemId === 'pistol_43' ? 'Pistola 43 Tactical' : 'Pistola');
     if (inventory.length < MAX_INVENTORY) {
-        inventory.push({ id: itemId, name: itemName, type: 'weapon', modelRef: target.model });
+        var weaponItem = { 
+            id: itemId, 
+            name: itemName, 
+            type: 'weapon', 
+            modelRef: target.model 
+        };
+        inventory.push(weaponItem);
         updateInventoryUI();
     } else {
         // Se pieno, scarta a terra (non ri-aggiungiamo alla scena per semplicità)
         console.warn('Inventario pieno: impossibile aggiungere pistola.');
+    }
+
+    // Aggiungi anche munizioni
+    var ammoId = (itemId === 'pistol_beretta' || itemId === 'pistol_43') ? 'pistol_ammo' : 'pistol_ammo';
+    var existingAmmo = inventory.find(function(x) { return x.id === ammoId; });
+    if (existingAmmo) {
+        existingAmmo.amount = (existingAmmo.amount || 0) + 30; // +30 munizioni
+    } else {
+        if (inventory.length < MAX_INVENTORY) {
+            inventory.push({ 
+                id: ammoId, 
+                name: 'Munizioni 9mm', 
+                type: 'ammo', 
+                amount: 30 
+            });
+        }
     }
 
     // Rimuovi dalle interazioni
@@ -857,14 +920,23 @@ function pickupGun(target) {
 
 function shoot() {
     // Effetto semplice di sparo: log + piccolo flash di luce
-    console.log('🔫 SPARO!');
+    if (!equipped.rightHand || equipped.rightHand.type !== 'weapon') return;
+    
+    var weaponInfo = weaponData[equipped.rightHand.id];
+    if (!weaponInfo || weaponInfo.ammo <= 0) {
+        console.warn('Nessun proiettile disponibile!');
+        return;
+    }
+
+    console.log('🔫 SPARO! Colpi rimasti: ' + (weaponInfo.ammo - 1) + '/' + weaponInfo.ammoCapacity);
+    weaponInfo.ammo -= 1;
+    updateInventoryUI();
 
     if (!camera || !scene) return;
 
     var flash = new THREE.PointLight(0xffaa00, 2, 5);
     camera.add(flash);
     flash.position.set(0.2, -0.1, -0.5);
-
 
     // Crea un proiettile che viaggia in avanti
     var origin = new THREE.Vector3().copy(camera.position);
@@ -920,10 +992,8 @@ function updateInventoryUI() {
             cell.textContent = inventory[i].name;
             (function(item){
                 cell.onclick = function(){
-                    // Equipaggia in mano destra per semplicità (se arma)
-                    if (item.type === 'weapon') {
-                        equipRightHand(item);
-                    }
+                    // Mostra modal con dettagli, non equipaggia subito
+                    showItemDetail(item);
                 };
             })(inventory[i]);
         } else {
@@ -941,6 +1011,54 @@ function updateInventoryUI() {
     if (sc) sc.textContent = equipped.chest ? equipped.chest.name : '-';
     if (sl) sl.textContent = equipped.leftHand ? equipped.leftHand.name : '-';
     if (sr) sr.textContent = equipped.rightHand ? equipped.rightHand.name : '-';
+}
+
+function showItemDetail(item) {
+    currentDetailItem = item;
+    var modal = document.getElementById('item-detail-modal');
+    if (!modal) return;
+
+    // Aggiorna nome
+    var nameEl = document.getElementById('item-detail-name');
+    if (nameEl) nameEl.textContent = item.name;
+
+    // Aggiorna stats
+    var statsEl = document.getElementById('item-detail-stats');
+    if (statsEl) {
+        var statsHtml = '';
+        if (item.type === 'weapon') {
+            var weaponInfo = weaponData[item.id];
+            if (weaponInfo) {
+                statsHtml = '<strong>Arma</strong><br>';
+                statsHtml += 'Tipo: ' + weaponInfo.fireRate + '<br>';
+                statsHtml += 'Danno: ' + weaponInfo.damage + '<br>';
+                statsHtml += 'Caricatore: ' + weaponInfo.ammo + '/' + weaponInfo.ammoCapacity + '<br>';
+            }
+        } else if (item.type === 'ammo') {
+            statsHtml = '<strong>Munizioni</strong><br>';
+            statsHtml += 'Quantità: ' + (item.amount || 1);
+        }
+        statsEl.innerHTML = statsHtml || 'Nessun dato disponibile';
+    }
+
+    // Equip button handler
+    var equipBtn = document.getElementById('modal-equip-btn');
+    if (equipBtn) {
+        equipBtn.onclick = function() {
+            equipRightHand(item);
+            modal.style.display = 'none';
+        };
+    }
+
+    modal.style.display = 'flex';
+
+    // Close button
+    var closeBtn = document.getElementById('modal-close-btn');
+    if (closeBtn) {
+        closeBtn.onclick = function() {
+            modal.style.display = 'none';
+        };
+    }
 }
 
 function equipRightHand(item) {
@@ -991,6 +1109,69 @@ function setPlayerHealth(value){
             fill.style.background = 'linear-gradient(90deg, #3bd16f, #1ea757)';
         }
     }
+}
+
+function beginReload() {
+    if (!equipped.rightHand || equipped.rightHand.type !== 'weapon') return;
+    var weaponInfo = weaponData[equipped.rightHand.id];
+    if (!weaponInfo) return;
+
+    // Cerco munizioni nel inventario
+    var ammoIdx = inventory.findIndex(function(x) {
+        return x.type === 'ammo' && x.id === weaponInfo.ammoType;
+    });
+    
+    if (ammoIdx < 0) {
+        console.warn('Nessuna munizione disponibile!');
+        return;
+    }
+
+    var ammo = inventory[ammoIdx];
+    if (ammo.amount <= 0) {
+        console.warn('Munizione esaurita!');
+        return;
+    }
+
+    isReloading = true;
+    var reloadBar = document.getElementById('reload-bar');
+    if (reloadBar) reloadBar.style.display = 'block';
+
+    var startTime = performance.now();
+    var originalAmmo = weaponInfo.ammo;
+
+    function updateReload(currentTime) {
+        var elapsed = (currentTime - startTime) / 1000;
+        var progress = Math.min(elapsed / reloadDuration, 1);
+        var progressEl = document.getElementById('reload-progress');
+        if (progressEl) {
+            progressEl.style.width = (progress * 100) + '%';
+        }
+
+        if (progress >= 1) {
+            // Reload completo
+            var ammoNeeded = weaponInfo.ammoCapacity - originalAmmo;
+            if (ammo.amount >= ammoNeeded) {
+                weaponInfo.ammo = weaponInfo.ammoCapacity;
+                ammo.amount -= ammoNeeded;
+            } else {
+                weaponInfo.ammo = originalAmmo + ammo.amount;
+                ammo.amount = 0;
+            }
+
+            if (ammo.amount <= 0) {
+                inventory.splice(ammoIdx, 1);
+            }
+
+            isReloading = false;
+            reloadBar.style.display = 'none';
+            updateInventoryUI();
+            console.log('✅ Arma ricaricata! Colpi: ' + weaponInfo.ammo + '/' + weaponInfo.ammoCapacity);
+        } else {
+            requestAnimationFrame(updateReload);
+        }
+    }
+
+    requestAnimationFrame(updateReload);
 }
 
 // Inizializza UI inventario e salute all'avvio del gioco

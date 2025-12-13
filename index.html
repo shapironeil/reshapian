@@ -150,6 +150,31 @@
         </div>
     </div>
 
+    <!-- Item detail modal -->
+    <div id="item-detail-modal" class="item-detail-modal" style="display: none;">
+        <div class="modal-content">
+            <button class="modal-close-btn" id="modal-close-btn">✕</button>
+            <div class="modal-preview">
+                <div id="item-3d-preview" class="item-3d-preview">
+                    <!-- 3D model preview will render here -->
+                </div>
+            </div>
+            <div class="modal-stats">
+                <h3 id="item-detail-name">Oggetto</h3>
+                <div id="item-detail-stats">
+                    <!-- Stats dinamiche -->
+                </div>
+                <button id="modal-equip-btn" class="modal-equip-btn">Equipaggia</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reload bar HUD -->
+    <div id="reload-bar" class="reload-bar" style="display: none;">
+        <div id="reload-progress" class="reload-progress"></div>
+        <div class="reload-text">Ricarica...</div>
+    </div>
+
     <script src="assets/libs/three.min.js"></script>
     <script src="assets/libs/GLTFLoader.js"></script>
     <script src="scripts/game.js"></script>

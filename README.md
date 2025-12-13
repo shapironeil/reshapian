@@ -1,10 +1,21 @@
-# Shappa Games - Gioco 3D
+# 🎮 Reshapiam - Open-World RPG Engine
 
-## 🎮 APPLICAZIONE DESKTOP CON ELECTRON
-✅ App desktop nativa con Electron
-✅ Tutte le risorse sono in locale - nessuna connessione internet richiesta!
-✅ Ambiente virtuale ENORME 500x500 unità pronto per i tuoi oggetti 3D
-✅ Finestra 1280x720 come un vero gioco
+> Un gioco **open-world dinamico** con sistemi di progressione emergenti, reputazione basata su scelte, e generazione procedurale di spazi.
+
+## ⚡ STATUS ATTUALE (13 DIC 2025)
+
+### ✅ COMPLETATO OGGI
+- **Bug fix**: Pistole invisibili quando equipaggiate (scale microscopiche corrette)
+- **Architettura**: Grand Vision document con roadmap 4 fasi
+- **Sistemi pianificati**: Space generation, Player progression, NPC memory
+- **Ricerca**: Game design research (GTA, RDR2, Skyrim patterns)
+
+### 🎮 APPLICAZIONE DESKTOP CON ELECTRON
+✅ App desktop nativa con Electron  
+✅ Tutte le risorse sono in locale - nessuna connessione internet richiesta!  
+✅ Ambiente virtuale ENORME 500x500 unità pronto per i tuoi oggetti 3D  
+✅ Finestra 1280x720 come un vero gioco  
+✅ Sistema di equipment 3D (armi visibili in prima persona)
 
 ## Come Avviare il Gioco
 ### Metodo 1: Launcher Automatico (CONSIGLIATO)

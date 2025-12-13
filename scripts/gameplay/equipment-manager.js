@@ -19,12 +19,12 @@ class EquipmentManager {
     // FPS STANDARDS: Based on CS:GO, Call of Duty, Valorant positioning
     this.slotConfigs = {
       'right-hand': {
-        position: [0.4, -0.45, -0.65],  // STANDARD FPS: Bottom-right (0.4), lower (-0.45), barrel forward (-0.65)
+        position: [0.4, -0.45, -0.5],  // MOVED FORWARD: Z from -0.65 to -0.5 (closer to camera)
         rotation: [-0.05, -0.1, 0.05],  // Slight tilt for natural feel (CS:GO style)
         scale: 2.0,  // LARGER viewmodel (30-35% screen coverage like AAA FPS)
       },
       'left-hand': {
-        position: [-0.4, -0.45, -0.65],  // Mirror of right-hand
+        position: [-0.4, -0.45, -0.5],  // MOVED FORWARD: Mirror of right-hand
         rotation: [-0.05, Math.PI + 0.1, -0.05],  // Mirrored with natural tilt
         scale: 2.0,  // Same size as right-hand
       },

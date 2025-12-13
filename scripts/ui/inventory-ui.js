@@ -319,6 +319,22 @@ class InventoryUI {
     const item = this.gameState.playerInventory?.find((i) => i.id === itemId);
     if (!item) return;
 
+    // Se c'è già qualcosa equipaggiato in questo slot, spostalo nell'inventario
+    const equipped = this.gameState.equippedItems || {};
+    if (equipped[slotType]) {
+      console.log("🔄 Slot occupato, rimozione item precedente");
+      this.unequipFromSlot(slotType);
+    }
+
+    // Controlla se l'item è già equipaggiato in un altro slot
+    for (const [existingSlot, equippedItem] of Object.entries(equipped)) {
+      if (equippedItem && equippedItem.id === itemId) {
+        console.log("⚠️ Item già equipaggiato in", existingSlot, "- rimozione");
+        this.unequipFromSlot(existingSlot);
+        break;
+      }
+    }
+
     // Update game state
     if (!this.gameState.equippedItems) {
       this.gameState.equippedItems = {};
@@ -329,6 +345,64 @@ class InventoryUI {
     if (this.equipmentManager) {
       this.equipmentManager.equipItem(item, slotType);
     }
+    
+    // Aggiorna anche legacy state per compatibilità
+    if (this.gameState.inventory && this.gameState.inventory.equipped) {
+      this.gameState.inventory.equipped[slotType] = item;
+    }
+    
+    // Se è un'arma in mano destra, aggiorna weaponState
+    if (slotType === 'right-hand' && item.type === 'weapon' && this.gameState.player) {
+      const ws = this.gameState.player.weaponState;
+      if (ws) {
+        ws.currentWeapon = item.id;
+        
+        // Determina tipo munizioni e capacità caricatore
+        if (item.id === 'pistol_beretta') {
+          ws.ammoType = '9mm';
+          ws.maxMag = 15;
+          ws.currentMag = Math.min(ws.currentMag, ws.maxMag);
+        } else if (item.id === 'pistol_43') {
+          ws.ammoType = '45acp';
+          ws.maxMag = 8;
+          ws.currentMag = Math.min(ws.currentMag, ws.maxMag);
+        }
+        
+        console.log("🔫 Arma equipaggiata:", item.id, "Munizioni:", ws.ammoType, ws.currentMag + "/" + ws.maxMag);
+        
+        // Mostra notifica equipaggiamento
+        if (window.RSG && window.RSG.ui && window.RSG.ui.notifications) {
+          window.RSG.ui.notifications.showWeaponEquipped(item.name);
+        }
+      }
+      
+      // Flag legacy
+      this.gameState.player.hasGun = true;
+      this.gameState.player.heldWeapon = item.id;
+    }
+    
+    console.log("✅ Equipaggiato", item.name, "in", slotType);
+  }
+
+  unequipFromSlot(slotType) {
+    const equipped = this.gameState.equippedItems || {};
+    const item = equipped[slotType];
+    if (!item) return;
+
+    // Rimuovi dallo stato
+    delete equipped[slotType];
+    
+    // Rimuovi dal rendering 3D
+    if (this.equipmentManager) {
+      this.equipmentManager.unequipItem(slotType);
+    }
+    
+    // Aggiorna legacy state
+    if (this.gameState.inventory && this.gameState.inventory.equipped) {
+      delete this.gameState.inventory.equipped[slotType];
+    }
+    
+    console.log("❌ Rimosso", item.name, "da", slotType);
   }
 
   moveEquippedItem(fromSlot, toSlot) {

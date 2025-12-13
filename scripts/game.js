@@ -31,6 +31,22 @@ function createInitialState() {
       hasGun: false,
       heldWeapon: null,
       health: 100,
+      // Sistema munizioni
+      ammo: {
+        '9mm': 45,        // Beretta (15 x 3 caricatori)
+        '45acp': 24,      // Pistol 43 (8 x 3 caricatori)
+        '556': 90,        // Futuro: rifle
+        'shotgun': 12,
+        'grenade': 2
+      },
+      weaponState: {
+        currentWeapon: null,        // id arma equipaggiata ('pistol_beretta', etc)
+        currentMag: 15,             // Colpi nel caricatore corrente
+        maxMag: 15,                 // Capacità caricatore
+        ammoType: '9mm',            // Tipo munizioni usato
+        isReloading: false,
+        reloadStartTime: 0
+      }
     },
     ui: {
       isUsingPC: false,
@@ -808,7 +824,10 @@ function setupControls() {
         toggleInventory();
       },
       reload: function () {
-        if (equipped.rightHand && equipped.rightHand.type === "weapon" && !isReloading) {
+        // Usa il nuovo sistema munizioni se disponibile
+        if (window.RSG && window.RSG.systems && window.RSG.systems.projectiles && window.RSG.systems.projectiles.reloadWeapon) {
+          window.RSG.systems.projectiles.reloadWeapon();
+        } else if (equipped.rightHand && equipped.rightHand.type === "weapon" && !isReloading) {
           beginReload();
         }
       },
@@ -1092,8 +1111,51 @@ function animate() {
     equipmentManager.updateAllEquipped();
   }
 
+  // Update ammo HUD
+  updateAmmoDisplay();
+
   if (renderer && scene && camera) {
     renderer.render(scene, camera);
+  }
+}
+
+function updateAmmoDisplay() {
+  var ammoCounter = document.getElementById('ammo-counter');
+  var ammoCurrent = document.getElementById('ammo-current');
+  var ammoReserve = document.getElementById('ammo-reserve');
+  var reloadIndicator = document.getElementById('reload-indicator');
+  
+  if (!ammoCounter || !ammoCurrent || !ammoReserve) return;
+  
+  // Mostra HUD solo se ha un'arma equipaggiata
+  var hasWeapon = false;
+  if (state && state.inventory && state.inventory.equipped && state.inventory.equipped.rightHand) {
+    var equipped = state.inventory.equipped.rightHand;
+    hasWeapon = equipped.type === 'weapon';
+  }
+  
+  if (hasWeapon && state && state.player && state.player.weaponState) {
+    var ws = state.player.weaponState;
+    ammoCounter.style.display = 'flex';
+    ammoCurrent.textContent = ws.currentMag || 0;
+    ammoReserve.textContent = state.player.ammo[ws.ammoType] || 0;
+    
+    // Mostra indicatore ricarica
+    if (reloadIndicator) {
+      reloadIndicator.style.display = ws.isReloading ? 'block' : 'none';
+    }
+    
+    // Cambia colore se munizioni basse
+    if (ws.currentMag <= 3) {
+      ammoCurrent.parentElement.style.color = '#ff4444';
+    } else if (ws.currentMag <= 7) {
+      ammoCurrent.parentElement.style.color = '#ffaa00';
+    } else {
+      ammoCurrent.parentElement.style.color = '#fff';
+    }
+  } else {
+    ammoCounter.style.display = 'none';
+    if (reloadIndicator) reloadIndicator.style.display = 'none';
   }
 }
 
@@ -1167,63 +1229,99 @@ function handleInteract() {
   var target = getNearestInteractable();
   if (!target) return;
 
+  // PC ha logica dedicata
   if (target.id === "pc_laptop") {
     usePC();
-  } else if (target.id === "pistol_beretta" || target.id === "pistol_43") {
-    pickupGun(target);
-  } else if (target.type === "robot") {
+    return;
+  }
+  
+  // Robot ha dialogo
+  if (target.type === "robot") {
     startDialogue();
+    return;
+  }
+  
+  // Tutti gli oggetti usable → pickup generalizzato (legacy)
+  if (target.category === "usable") {
+    pickupItem(target);
+    return;
   }
 }
 
-function pickupGun(target) {
+function pickupItem(target) {
   if (!camera) return;
   if (!target || !target.model) return;
 
-  // Rimuovi la pistola dal mondo
+  // 1. Ottieni metadata da ItemRegistry (se disponibile)
+  var itemData = null;
+  if (window.RSG && window.RSG.data && window.RSG.data.itemRegistry) {
+    itemData = window.RSG.data.itemRegistry.getItem(target.id);
+  }
+  
+  if (!itemData) {
+    // Fallback per retrocompatibilità
+    itemData = {
+      id: target.id || "unknown",
+      name: target.id === "pistol_beretta" ? "Pistola Beretta" : target.id === "pistol_43" ? "Pistola 43 Tactical" : "Item",
+      type: "item"
+    };
+  }
+
+  // 2. Rimuovi dal mondo 3D
   if (target.model.parent) {
     target.model.parent.remove(target.model);
   }
 
-  // Aggiungi all'inventario (se spazio)
-  var itemId = target.id || "pistol";
-  var itemName = itemId === "pistol_beretta" ? "Pistola Beretta" : itemId === "pistol_43" ? "Pistola 43 Tactical" : "Pistola";
-  if (inventory.length < MAX_INVENTORY) {
-    var weaponItem = {
-      id: itemId,
-      name: itemName,
-      type: "weapon",
-      modelRef: target.model,
-    };
-    inventory.push(weaponItem);
-    updateInventoryUI();
-  } else {
-    // Se pieno, scarta a terra (non ri-aggiungiamo alla scena per semplicità)
-    console.warn("Inventario pieno: impossibile aggiungere pistola.");
-  }
-
-  // Aggiungi anche munizioni
-  var ammoId = itemId === "pistol_beretta" || itemId === "pistol_43" ? "pistol_ammo" : "pistol_ammo";
-  var existingAmmo = inventory.find(function (x) {
-    return x.id === ammoId;
-  });
-  if (existingAmmo) {
-    existingAmmo.amount = (existingAmmo.amount || 0) + 30; // +30 munizioni
-  } else {
-    if (inventory.length < MAX_INVENTORY) {
-      inventory.push({
-        id: ammoId,
-        name: "Munizioni 9mm",
-        type: "ammo",
-        amount: 30,
+  // 3. Aggiungi a playerInventory (se esiste)
+  if (state && state.playerInventory) {
+    var existingItem = state.playerInventory.find(function(item) { return item.id === itemData.id; });
+    
+    if (existingItem) {
+      existingItem.quantity = (existingItem.quantity || 1) + 1;
+    } else {
+      state.playerInventory.push({
+        id: itemData.id,
+        name: itemData.name,
+        type: itemData.type || "item",
+        damage: itemData.damage || 0,
+        defense: itemData.defense || 0,
+        weight: itemData.weight || 1,
+        rarity: itemData.rarity || "common",
+        description: itemData.description || "",
+        modelFile: itemData.modelFile || target.file,
+        icon: itemData.icon || "",
+        quantity: 1
       });
     }
   }
 
-  // Rimuovi dalle interazioni
+  // 4. Aggiungi a inventory legacy (per compatibilità)
+  if (inventory.length < MAX_INVENTORY) {
+    var itemForLegacy = {
+      id: itemData.id,
+      name: itemData.name,
+      type: itemData.type || "item",
+      modelRef: target.model,
+    };
+    inventory.push(itemForLegacy);
+    updateInventoryUI();
+  } else {
+    console.warn("⚠️ Inventario pieno");
+  }
+
+  // 5. Rimuovi da interactables
   interactables = interactables.filter(function (obj) {
-    return obj.id !== "pistol_beretta" && obj.id !== "pistol_43";
+    return obj !== target;
   });
+  
+  // 6. Feedback
+  console.log("✅ Raccolto:", itemData.name);
+  
+  // 7. Flag legacy per armi
+  if (itemData.type === "weapon") {
+    hasGun = true;
+    state.player.hasGun = true;
+  }
 }
 
 function shoot() {

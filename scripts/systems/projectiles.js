@@ -8,8 +8,16 @@ window.RSG.systems = window.RSG.systems || {};
   var ctx = null;
 
   function resolveWeaponInfo(equipped, weaponDefs) {
-    if (!equipped || !equipped.rightHand) return null;
-    var def = weaponDefs[equipped.rightHand.id];
+    // Supporta sia legacy che nuovo sistema
+    var weapon = null;
+    if (equipped && equipped.rightHand) {
+      weapon = equipped.rightHand;
+    } else if (equipped && equipped['right-hand']) {
+      weapon = equipped['right-hand'];
+    }
+    
+    if (!weapon) return null;
+    var def = weaponDefs[weapon.id];
     return def || null;
   }
 
@@ -34,16 +42,47 @@ window.RSG.systems = window.RSG.systems || {};
     var scene = ctx.getScene();
     if (!camera || !scene) return;
 
-    var equipped = ctx.state.inventory ? ctx.state.inventory.equipped : null;
+    // Supporta sia state.inventory.equipped che state.equippedItems
+    var equipped = ctx.state.equippedItems || (ctx.state.inventory ? ctx.state.inventory.equipped : null);
+    if (!equipped) {
+      console.log("❌ Nessuna arma equipaggiata");
+      return;
+    }
+    
     var weaponInfo = resolveWeaponInfo(equipped, ctx.weaponDefs);
-    if (!weaponInfo || weaponInfo.type !== "weapon") return;
-
-    if (weaponInfo.ammo <= 0) {
-      console.warn("Nessun proiettile disponibile!");
+    if (!weaponInfo || weaponInfo.type !== "weapon") {
+      console.log("❌ Oggetto equipaggiato non è un'arma");
       return;
     }
 
-    weaponInfo.ammo -= 1;
+    // Check munizioni nel caricatore
+    var ws = ctx.state.player ? ctx.state.player.weaponState : null;
+    if (ws && ws.currentMag !== undefined) {
+      if (ws.isReloading) {
+        console.log("⏳ Ricarica in corso...");
+        return;
+      }
+      
+      if (ws.currentMag <= 0) {
+        console.log("🔫 Click! Caricatore vuoto - Premi R per ricaricare");
+        if (window.RSG && window.RSG.ui && window.RSG.ui.notifications) {
+          window.RSG.ui.notifications.showEmptyMag();
+        }
+        // TODO: Play empty click sound
+        return;
+      }
+      
+      // Decrementa munizioni nel caricatore
+      ws.currentMag--;
+    } else {
+      // Fallback legacy: controlla ammo del'arma
+      if (weaponInfo.ammo <= 0) {
+        console.warn("Nessun proiettile disponibile!");
+        return;
+      }
+      weaponInfo.ammo -= 1;
+    }
+    
     if (typeof ctx.updateInventoryUI === "function") ctx.updateInventoryUI();
 
     var flash = new THREE.PointLight(0xffaa00, 2, 5);
@@ -62,13 +101,16 @@ window.RSG.systems = window.RSG.systems || {};
     bulletMesh.position.copy(startPos);
     scene.add(bulletMesh);
 
+    // Ottieni weapon da entrambi i sistemi
+    var weapon = equipped['right-hand'] || equipped.rightHand;
+    
     ctx.bullets.push({
       mesh: bulletMesh,
       direction: direction.clone(),
       remainingDistance: ctx.constants.BULLET_MAX_DISTANCE,
       stopped: false,
-      damage: weaponInfo.damage || 10,  // Danno dal'arma
-      weaponId: equipped.rightHand.id,
+      damage: weaponInfo.damage || 10,  // Danno dall'arma
+      weaponId: weapon ? weapon.id : 'unknown',
     });
   }
 
@@ -231,10 +273,64 @@ window.RSG.systems = window.RSG.systems || {};
     requestAnimationFrame(updateReload);
   }
 
+  function reloadWeapon() {
+    if (!ctx || !ctx.state || !ctx.state.player) return;
+    
+    var ws = ctx.state.player.weaponState;
+    if (!ws) return;
+    
+    // Controlla se già in ricarica
+    if (ws.isReloading) {
+      console.log("⏳ Ricarica già in corso...");
+      return;
+    }
+    
+    // Controlla se il caricatore è già pieno
+    if (ws.currentMag >= ws.maxMag) {
+      console.log("ℹ️ Caricatore già pieno");
+      return;
+    }
+    
+    // Controlla se ci sono munizioni di riserva
+    var ammoAvailable = ctx.state.player.ammo[ws.ammoType] || 0;
+    if (ammoAvailable <= 0) {
+      console.log("❌ Nessuna munizione di riserva disponibile!");
+      if (window.RSG && window.RSG.ui && window.RSG.ui.notifications) {
+        window.RSG.ui.notifications.showNoAmmo();
+      }
+      return;
+    }
+    
+    console.log("🔄 Ricarica in corso...");
+    ws.isReloading = true;
+    ws.reloadStartTime = performance.now();
+    
+    // Ricarica dopo 2 secondi
+    setTimeout(function() {
+      if (!ctx || !ctx.state || !ctx.state.player) return;
+      
+      var needed = ws.maxMag - ws.currentMag;
+      var toReload = Math.min(needed, ctx.state.player.ammo[ws.ammoType]);
+      
+      ws.currentMag += toReload;
+      ctx.state.player.ammo[ws.ammoType] -= toReload;
+      ws.isReloading = false;
+      
+      console.log("✅ Ricaricato! " + ws.currentMag + "/" + ws.maxMag);
+      console.log("📦 Riserva: " + ctx.state.player.ammo[ws.ammoType] + " colpi");
+      
+      // Mostra notifica ricarica completata
+      if (window.RSG && window.RSG.ui && window.RSG.ui.notifications) {
+        window.RSG.ui.notifications.showReload();
+      }
+    }, 2000); // 2 secondi
+  }
+
   window.RSG.systems.projectiles = {
     init: init,
     update: update,
     shoot: shoot,
     beginReload: beginReload,
+    reloadWeapon: reloadWeapon,
   };
 })();

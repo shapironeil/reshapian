@@ -24,7 +24,7 @@ window.RSG.content = window.RSG.content || {};
         file: "beretta_92fs_-_game_ready_-_free.glb",
         pos: [11, 1.08, -4.5],
         rot: Math.PI / 2 + Math.PI,  // 180° vertical rotation
-        scale: 0.025,  // INCREASED: Much larger on table (0.015 → 0.025)
+        scale: 0.05,  // MOLTO PIÙ GRANDE: ben visibile sul tavolo
         category: "usable",
         area: "indoor",
         id: "pistol_beretta",
@@ -33,7 +33,7 @@ window.RSG.content = window.RSG.content || {};
         file: "pistol_43_tactical__free_lowpoly.glb",
         pos: [9, 1.08, -4.5],
         rot: Math.PI / 2,
-        scale: 0.02,  // INCREASED: Much larger on table (0.012 → 0.02)
+        scale: 0.045,  // MOLTO PIÙ GRANDE: ben visibile sul tavolo
         category: "usable",
         area: "indoor",
         id: "pistol_43",

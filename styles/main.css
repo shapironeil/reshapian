@@ -46,6 +46,86 @@ body {
   letter-spacing: 5px;
 }
 
+/* === Notification System === */
+.notification-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.notification {
+  background: rgba(0, 0, 0, 0.85);
+  color: white;
+  padding: 12px 20px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 250px;
+  max-width: 400px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transform: translateX(500px);
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  border-left: 4px solid #3498db;
+  pointer-events: auto;
+}
+
+.notification-show {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.notification-hide {
+  transform: translateX(500px);
+  opacity: 0;
+}
+
+.notification-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.notification-message {
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+/* Notification Types */
+.notification-info {
+  border-left-color: #3498db;
+}
+
+.notification-success {
+  border-left-color: #2ecc71;
+}
+
+.notification-warning {
+  border-left-color: #f39c12;
+}
+
+.notification-error {
+  border-left-color: #e74c3c;
+}
+
+.notification-pickup {
+  border-left-color: #9b59b6;
+  background: rgba(155, 89, 182, 0.15);
+  backdrop-filter: blur(10px);
+}
+
+.notification-weapon {
+  border-left-color: #e67e22;
+  background: rgba(230, 126, 34, 0.15);
+  backdrop-filter: blur(10px);
+}
+
 h2 {
   font-size: 2.5rem;
   margin-bottom: 30px;
@@ -378,6 +458,60 @@ h2 {
 
 .modal-equip-btn:hover {
   background: #7a8ef0;
+}
+
+/* Ammo Counter HUD */
+.ammo-counter {
+  position: fixed;
+  bottom: 25px;
+  right: 25px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 12px 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+}
+
+.ammo-mag {
+  font-size: 2rem;
+  color: #fff;
+}
+
+.ammo-separator {
+  font-size: 1.5rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.ammo-reserve {
+  font-size: 1.3rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Reload Indicator */
+.reload-indicator {
+  position: fixed;
+  bottom: 100px;
+  right: 25px;
+  background: rgba(255, 165, 0, 0.9);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-family: 'Arial', sans-serif;
+  font-weight: bold;
+  font-size: 1.1rem;
+  z-index: 1001;
+  animation: pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.05); }
 }
 
 /* Reload bar HUD */

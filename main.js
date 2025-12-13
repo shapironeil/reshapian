@@ -25,8 +25,9 @@ function createWindow() {
     // Carica il file index.html
     mainWindow.loadFile('index.html');
 
-    // DevTools TEMPORANEAMENTE ABILITATO per debug
-    mainWindow.webContents.openDevTools();
+    // DevTools disabilitato per produzione
+    // Per debug: decommentare la riga sotto
+    // mainWindow.webContents.openDevTools();
 
     // Evento quando la finestra viene chiusa
     mainWindow.on('closed', function () {

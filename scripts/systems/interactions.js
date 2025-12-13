@@ -71,28 +71,85 @@ window.RSG.systems = window.RSG.systems || {};
     var target = getNearestInteractable();
     if (!target) return;
 
+    // PC ha logica dedicata
     if (target.id === "pc_laptop") {
       usePC();
-    } else if (target.id === "pistol_beretta" || target.id === "pistol_43") {
-      pickupGun(target);
-    } else if (target.type === "robot") {
+      return;
+    }
+    
+    // Robot ha dialogo
+    if (target.type === "robot") {
       startDialogue();
+      return;
+    }
+    
+    // Tutti gli oggetti usable → pickup generalizzato
+    if (target.category === "usable") {
+      pickupItem(target);
+      return;
     }
   }
 
-  function pickupGun(target) {
+  function pickupItem(target) {
     if (!ctx || !ctx.state || !target || !target.model) return;
 
+    // 1. Ottieni metadata da ItemRegistry
+    var itemData = null;
+    if (window.RSG && window.RSG.data && window.RSG.data.itemRegistry) {
+      itemData = window.RSG.data.itemRegistry.getItem(target.id);
+    }
+    
+    if (!itemData) {
+      console.warn("⚠️ Item non trovato in registry:", target.id);
+      // Fallback per retrocompatibilità
+      itemData = {
+        id: target.id || "unknown",
+        name: target.id === "pistol_beretta" ? "Pistola Beretta" : target.id === "pistol_43" ? "Pistola 43 Tactical" : "Item",
+        type: "item"
+      };
+    }
+
+    // 2. Rimuovi dal mondo 3D
     if (target.model.parent) {
       target.model.parent.remove(target.model);
     }
 
+    // 3. Aggiungi a state.playerInventory (per InventoryUI moderna)
+    if (ctx.state.playerInventory) {
+      var existingItem = ctx.state.playerInventory.find(function(item) { return item.id === itemData.id; });
+      
+      if (existingItem) {
+        existingItem.quantity = (existingItem.quantity || 1) + 1;
+      } else {
+        ctx.state.playerInventory.push({
+          id: itemData.id,
+          name: itemData.name,
+          type: itemData.type || "item",
+          damage: itemData.damage || 0,
+          defense: itemData.defense || 0,
+          weight: itemData.weight || 1,
+          rarity: itemData.rarity || "common",
+          description: itemData.description || "",
+          modelFile: itemData.modelFile || target.file,
+          icon: itemData.icon || "",
+          quantity: 1
+        });
+      }
+
+      // Mostra notifica pickup
+      if (window.RSG && window.RSG.ui && window.RSG.ui.notifications) {
+        var quantity = existingItem ? existingItem.quantity : 1;
+        window.RSG.ui.notifications.showPickup(itemData.name, quantity);
+      }
+    }
+
+    // 4. Aggiungi anche a inventory legacy (per compatibilità)
     var inventoryState = getInventory();
     var inventory = inventoryState.items || [];
     var max = inventoryState.max || 10;
 
-    var itemId = target.id || "pistol";
-    var itemName = itemId === "pistol_beretta" ? "Pistola Beretta" : itemId === "pistol_43" ? "Pistola 43 Tactical" : "Pistola";
+    var itemId = target.id || "item";
+    var itemName = itemData.name;
 
     if (inventory.length < max) {
       var weaponItem = {
@@ -187,10 +244,19 @@ window.RSG.systems = window.RSG.systems || {};
     var text = "E - Interagisci";
     if (target.id === "pc_laptop") {
       text = "E - Usa PC";
-    } else if (target.id === "pistol_beretta" || target.id === "pistol_43") {
-      text = "E - Raccogli pistola";
     } else if (target.type === "robot") {
       text = "E - Parla con il robottino";
+    } else if (target.category === "usable") {
+      // Determina il tipo di oggetto per prompt specifico
+      var itemName = "oggetto";
+      if (target.id && target.id.includes("pistol")) {
+        itemName = "pistola";
+      } else if (target.id === "sword_longsword") {
+        itemName = "spada";
+      } else if (target.id === "cowboy_hat") {
+        itemName = "cappello";
+      }
+      text = "E - Raccogli " + itemName;
     }
 
     ctx.ui.hud.setInteractPromptVisible(true, text);

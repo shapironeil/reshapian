@@ -295,12 +295,125 @@ window.RSG.systems = window.RSG.systems || {};
     addTrackedObject(berm, { staticTarget: true });
   }
 
+  function buildBunkerLayout() {
+    // Bunker: 25x25 concrete floor, dark walls, claustrophobic
+    var floorGeometry = new THREE.PlaneGeometry(25, 25);
+    var floorMaterial = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.9, metalness: 0.1 });
+    var floor = new THREE.Mesh(floorGeometry, floorMaterial);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    addTrackedObject(floor, { staticTarget: true });
+
+    // Concrete walls
+    var wallMaterial = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.8 });
+    var wallHeight = 4;
+    
+    // North wall
+    var wallNorthGeometry = new THREE.BoxGeometry(25, wallHeight, 0.5);
+    var wallNorth = new THREE.Mesh(wallNorthGeometry, wallMaterial);
+    wallNorth.position.set(0, wallHeight / 2, -12.5);
+    wallNorth.castShadow = true;
+    wallNorth.receiveShadow = true;
+    addTrackedObject(wallNorth, { staticTarget: true });
+    
+    // South wall
+    var wallSouth = new THREE.Mesh(wallNorthGeometry, wallMaterial);
+    wallSouth.position.set(0, wallHeight / 2, 12.5);
+    wallSouth.castShadow = true;
+    wallSouth.receiveShadow = true;
+    addTrackedObject(wallSouth, { staticTarget: true });
+    
+    // East/West walls
+    var wallSideGeometry = new THREE.BoxGeometry(0.5, wallHeight, 25);
+    var wallEast = new THREE.Mesh(wallSideGeometry, wallMaterial);
+    wallEast.position.set(12.5, wallHeight / 2, 0);
+    wallEast.castShadow = true;
+    wallEast.receiveShadow = true;
+    addTrackedObject(wallEast, { staticTarget: true });
+    
+    var wallWest = new THREE.Mesh(wallSideGeometry, wallMaterial);
+    wallWest.position.set(-12.5, wallHeight / 2, 0);
+    wallWest.castShadow = true;
+    wallWest.receiveShadow = true;
+    addTrackedObject(wallWest, { staticTarget: true });
+    
+    // Ceiling
+    var ceilingGeometry = new THREE.PlaneGeometry(25, 25);
+    var ceilingMaterial = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.9 });
+    var ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial);
+    ceiling.rotation.x = Math.PI / 2;
+    ceiling.position.y = wallHeight;
+    ceiling.receiveShadow = true;
+    addTrackedObject(ceiling, { staticTarget: true });
+  }
+
+  function buildApartmentLayout() {
+    // Apartment: 15x12 parquet floor, painted walls, window
+    var floorGeometry = new THREE.PlaneGeometry(15, 12);
+    var floorMaterial = new THREE.MeshStandardMaterial({ color: 0x8b7355, roughness: 0.7 });
+    var floor = new THREE.Mesh(floorGeometry, floorMaterial);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    addTrackedObject(floor, { staticTarget: true });
+
+    // Painted walls
+    var wallMaterial = new THREE.MeshStandardMaterial({ color: 0xd4d4c8, roughness: 0.6 });
+    var wallHeight = 3.5;
+    
+    // Back wall
+    var wallBackGeometry = new THREE.BoxGeometry(15, wallHeight, 0.3);
+    var wallBack = new THREE.Mesh(wallBackGeometry, wallMaterial);
+    wallBack.position.set(0, wallHeight / 2, -6);
+    wallBack.castShadow = true;
+    wallBack.receiveShadow = true;
+    addTrackedObject(wallBack, { staticTarget: true });
+    
+    // Front wall with window opening
+    var wallFrontLeftGeometry = new THREE.BoxGeometry(4, wallHeight, 0.3);
+    var wallFrontLeft = new THREE.Mesh(wallFrontLeftGeometry, wallMaterial);
+    wallFrontLeft.position.set(-5.5, wallHeight / 2, 6);
+    wallFrontLeft.castShadow = true;
+    wallFrontLeft.receiveShadow = true;
+    addTrackedObject(wallFrontLeft, { staticTarget: true });
+    
+    var wallFrontRight = new THREE.Mesh(wallFrontLeftGeometry, wallMaterial);
+    wallFrontRight.position.set(5.5, wallHeight / 2, 6);
+    wallFrontRight.castShadow = true;
+    wallFrontRight.receiveShadow = true;
+    addTrackedObject(wallFrontRight, { staticTarget: true });
+    
+    // Window (sky-colored plane)
+    var windowGeometry = new THREE.PlaneGeometry(6, 2);
+    var windowMaterial = new THREE.MeshBasicMaterial({ color: 0x87ceeb, transparent: true, opacity: 0.6 });
+    var window = new THREE.Mesh(windowGeometry, windowMaterial);
+    window.position.set(0, 2, 6.1);
+    addTrackedObject(window, { staticTarget: false });
+    
+    // Side walls
+    var wallSideGeometry = new THREE.BoxGeometry(0.3, wallHeight, 12);
+    var wallLeft = new THREE.Mesh(wallSideGeometry, wallMaterial);
+    wallLeft.position.set(-7.5, wallHeight / 2, 0);
+    wallLeft.castShadow = true;
+    wallLeft.receiveShadow = true;
+    addTrackedObject(wallLeft, { staticTarget: true });
+    
+    var wallRight = new THREE.Mesh(wallSideGeometry, wallMaterial);
+    wallRight.position.set(7.5, wallHeight / 2, 0);
+    wallRight.castShadow = true;
+    wallRight.receiveShadow = true;
+    addTrackedObject(wallRight, { staticTarget: true });
+  }
+
   function applyLayout(scene, env) {
     if (!env) return;
     if (env.layout === "warehouse") {
       buildWarehouseLayout();
     } else if (env.layout === "range") {
       buildRangeLayout();
+    } else if (env.layout === "bunker") {
+      buildBunkerLayout();
+    } else if (env.layout === "apartment") {
+      buildApartmentLayout();
     }
   }
 

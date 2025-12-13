@@ -5,15 +5,50 @@ Queste linee guida servono per rendere gli agent AI subito produttivi in questo 
 ## Panoramica & Architettura
 
 - App **desktop Electron** che carica un **gioco 3D single‑page** in **Three.js r128**.
+- **Vision a lungo termine**: open-world RPG dinamico con progressione del player, reputazione, economia e generazione procedurale di spazi (vedi [GRAND_VISION.md](GRAND_VISION.md)).
 - Entry point principali:
-  - `main.js`: processo principale Electron. Crea una finestra `BrowserWindow` (1280×720) e carica `index.html`.
-  - `index.html`: pagina root con menu hub, selezione gioco, impostazioni e contenitore del gioco (`#game-canvas`).
-  - `scripts/game.js`: logica 3D (scena, camera, movimento player, fisica base, caricamento modelli, interazioni, sparo, dialoghi).
-  - `scripts/menu.js`: gestione menu DOM e impostazioni; collega i pulsanti a `startGame` / `stopGame` e alle funzioni di setting.
+  - [main.js](main.js): processo principale Electron. Crea una finestra `BrowserWindow` (1280×720) e carica `index.html`.
+  - [index.html](index.html): pagina root con menu hub, selezione gioco, impostazioni e contenitore del gioco (`#game-canvas`).
+  - [scripts/game.js](scripts/game.js): orchestrator centrale. Crea stato di gioco (`window.RSG.state.current`), inizializza sistemi modulari, gestisce animation loop.
+  - [scripts/menu.js](scripts/menu.js): gestione menu DOM e impostazioni; collega i pulsanti a `startGame` / `stopGame` e alle funzioni di setting.
 - Tutti i modelli 3D sono **locali** in `models/` e caricati via `GLTFLoader` con path tipo `models/nome-modello.glb`.
 - Librerie di terze parti **vendorizzate**:
   - `assets/libs/three.min.js`
   - `assets/libs/GLTFLoader.js` (+ versione `.mjs`, da trattare come codice esterno).
+
+### Architettura Modulare (NUOVO)
+
+Il codice è stato ristrutturato in moduli ES5 (compatibili browser) organizzati per responsabilità:
+
+- **`window.RSG` namespace globale**:
+  - `window.RSG.state.current`: stato centralizzato del gioco (engine, input, player, ui, inventory, world, combat)
+  - `window.RSG.systems.*`: sistemi di gameplay (`input`, `movement`, `interactions`, `projectiles`, `model-loader`, `ai`)
+  - `window.RSG.content.*`: dati di contenuto (`models` - definizioni modelli 3D)
+  - `window.RSG.gameplay.*`: meccaniche di gioco (`weapons`, `equipment-manager`, `inventory`)
+  - `window.RSG.ui.*`: moduli UI (`hud`, `pc`, `dialogue`)
+
+**Pattern di modulo tipico** (IIFE con namespacing):
+```javascript
+window.RSG = window.RSG || {};
+window.RSG.systems = window.RSG.systems || {};
+
+(function() {
+  var ctx = null;
+  
+  function init(opts) {
+    ctx = { state: opts.state, getCamera: opts.getCamera, /* ... */ };
+  }
+  
+  function update(delta) { /* logica frame */ }
+  
+  window.RSG.systems.moduleName = { init, update };
+})();
+```
+
+**Quando estendi il codebase**:
+- Usa il namespace `window.RSG.*` appropriato
+- I moduli sono stateless: ricevono dipendenze in `init()` e non usano variabili globali dirette
+- [scripts/game.js](scripts/game.js) orchestra tutto: chiama `init()` sui moduli all'avvio e `update()` nell'animation loop
 
 ## Come Avviare & Fare Debug
 
@@ -27,33 +62,52 @@ Queste linee guida servono per rendere gli agent AI subito produttivi in questo 
 
 ## Pattern & Convenzioni Principali
 
-- **API di gioco globale** (usata dai menu):
-  - `window.startGame()` e `window.stopGame()` sono definite in `scripts/game.js` e chiamate da `scripts/menu.js`.
-  - Se aggiungi nuove azioni globali (es. `updateMouseSensitivity`, `togglePause`), esponile su `window` e controlla sempre con `typeof window.fn === 'function'` prima di chiamarle (stile già usato in `menu.js`).
-- **Setup dell’ambiente 3D** (`scripts/game.js`):
-  - `initThreeJS()` crea `scene`, `camera` in prima persona, `renderer`, luci principali e chiama `setupControls()`.
-  - `createEnvironment()` imposta:
-    - pavimento grande (circa 200×200) con griglia di riferimento,
-    - muri perimetrali del “capannone”,
-    - area casa centrale con pavimento in legno, muri più bassi, tavolo ecc.
-  - Mantieni lo stile esistente: variabili globali con `var` in alto, funzioni dichiarate nello stesso file, niente bundler/ESM.
-- **Caricamento modelli & asset**:
-  - `loadModels()` è il punto unico dove vengono registrati i modelli da `models/` (posizioni, rotazioni, scale, categorie).
-  - Ogni entry tipica ha: `file`, `pos: [x,y,z]`, `rot`, `scale` e opzionalmente `category`, `area`, `id`.
-  - Gli oggetti interattivi usano un `id` dedicato (es. `pc_laptop`, `pistol_beretta`) che viene poi gestito nella logica di interazione.
-  - Se aggiungi/modifichi il set “ufficiale” di modelli, aggiorna anche `models/DOWNLOAD_MODELS.md` (lista, requisiti tecnici, checklist).
-- **Sistema di interazione & prompt**:
-  - Gli oggetti interattivi sono tracciati in `interactables` (in `game.js`); la distanza di interazione usa la costante `INTERACT_DISTANCE`.
-  - Il gioco mostra:
-    - mirino `#crosshair` al centro,
-    - `#interact-prompt` (“E - Interagisci”) quando sei vicino a un oggetto usabile,
-    - `#shoot-prompt` (“Q - Spara”) quando hai un’arma.
-  - Gli overlay PC (`#pc-screen`) e dialogo (`#dialogue-ui`) vengono aperti/chiusi da `game.js` tramite `document.getElementById(...).style.display = ...`.
-- **Sparo & animali/bersagli**:
-  - Proiettili, bersagli statici e animali in movimento sono gestiti con gli array globali `bullets`, `staticTargets`, `movingAnimals`.
-  - Le principali costanti di fisica/armi sono definite in alto in `game.js`:
-    - `GRAVITY`, `MOVE_SPEED`, `BULLET_SPEED`, `BULLET_MAX_DISTANCE`, ecc.
-  - Quando estendi il sistema di combattimento, **riusa queste costanti** e gli array esistenti invece di crearne di nuovi in giro.
+### API di Gioco Globale
+- `window.startGame()` e `window.stopGame()` sono definite in [scripts/game.js](scripts/game.js) e chiamate da [scripts/menu.js](scripts/menu.js).
+- Se aggiungi nuove azioni globali (es. `updateMouseSensitivity`, `togglePause`), esponile su `window` e controlla sempre con `typeof window.fn === 'function'` prima di chiamarle.
+
+### Stato di Gioco Centralizzato
+- `window.RSG.state.current` è la singola source of truth:
+  - `state.engine`: scene, camera, renderer, isGameRunning
+  - `state.input`: moveForward, moveBackward, moveLeft, moveRight
+  - `state.player`: velocity, hasGun, heldWeapon, health
+  - `state.ui`: isUsingPC, isInDialogue, isInventoryOpen
+  - `state.world`: models, interactables, collisionObjects, bullets
+  - `state.inventory` + `state.playerInventory`: oggetti e equipment
+- Ricreato a ogni `startGame()` con `createInitialState()`.
+
+### Caricamento Modelli 3D
+- **Dati**: [scripts/content/models.js](scripts/content/models.js) definisce lista con `{ file, pos, rot, scale, category, area, id }`
+- **Loader**: [scripts/systems/model-loader.js](scripts/systems/model-loader.js) carica i `.glb` e popola `state.world.*`
+- **ItemRegistry**: [scripts/data/item-registry.js](scripts/data/item-registry.js) contiene metadata per equipment (stats, rarità)
+- Quando aggiungi modelli: entry in [models.js](scripts/content/models.js), usa `category: "usable"` per interattivi, aggiorna [DOWNLOAD_MODELS.md](models/DOWNLOAD_MODELS.md)
+
+### Sistema di Equipment 3D (NUOVO)
+- **EquipmentManager** ([scripts/gameplay/equipment-manager.js](scripts/gameplay/equipment-manager.js)): renderizza oggetti in prima persona con `slotConfigs` per posizionamento FPS (armi scale 2.0x viewmodel, tavola 0.008-0.025)
+- **InventoryUI** ([scripts/ui/inventory-ui.js](scripts/ui/inventory-ui.js)): layout 3 colonne (body + grid + stats), drag & drop, toggle con TAB
+- **Bug risolto**: scale pistole (0.0007 → 0.008), offset mani corretti
+
+### Sistemi di Gameplay
+- **Movement** ([scripts/systems/movement.js](scripts/systems/movement.js)): cinematica WASD + gravità
+- **Interactions** ([scripts/systems/interactions.js](scripts/systems/interactions.js)): raycast oggetti, routing PC/dialogo
+- **Projectiles** ([scripts/systems/projectiles.js](scripts/systems/projectiles.js)): proiettili, hit detection
+- **Input** ([scripts/systems/input.js](scripts/systems/input.js)): keyboard/mouse, pointer lock
+- Pattern: `init(opts)` + `update(delta)` + `dispose()`
+
+### Setup Ambiente 3D
+- `initThreeJS()` in [game.js](scripts/game.js): crea scene, camera, renderer, luci
+- `createEnvironment()`: pavimento 200×200, muri capannone, area casa centrale
+- Stile: `var` globals, no bundler/ESM
+
+### Interazioni & Prompt
+- Oggetti interattivi: `state.world.interactables`, distanza `INTERACT_DISTANCE`
+- Prompt: mirino `#crosshair`, `#interact-prompt` ("E"), `#shoot-prompt` ("Q")
+- Overlay: `#pc-screen`, `#dialogue-ui`, `#inventory-panel` gestiti da [scripts/ui/](scripts/ui/)
+
+### Combattimento
+- Proiettili: `state.world.bullets`, bersagli: `staticTargets`, `movingAnimals`
+- Costanti: `GRAVITY`, `MOVE_SPEED`, `BULLET_SPEED`, `BULLET_MAX_DISTANCE` in [game.js](scripts/game.js)
+- **Riusa costanti esistenti** invece di crearne nuove
 
 ## DOM, Menu & Stili
 
@@ -67,12 +121,9 @@ Queste linee guida servono per rendere gli agent AI subito produttivi in questo 
   - Quando entra nel gioco chiama `startGame`, quando esce chiama `stopGame` (se disponibili).
   - Per le impostazioni, aggiorna il valore in UI e chiama, se esiste, la funzione globale corrispondente (es. `updateMouseSensitivity`).
 - `styles/main.css`:
-  - Definisce il look “dark fantasy” dell’hub (`#hub-menu` con immagine `assets/images/reshapiam.png`) e lo stile dei pulsanti (`.menu-btn`, `.back-btn`, `.game-item-btn`).
-  - Per nuovi elementi UI, **riusa classi esistenti** quando possibile (es. `.menu-btn`, `.pc-*`, `.dialogue-*`, `.interact-prompt`) per coerenza visiva.
-  - Z‑index importante:
-    - canvas di gioco sotto,
-    - mirino e prompt sopra il canvas,
-    - overlay PC e dialogo sopra tutto (vedi `.pc-screen`, `.dialogue-ui`).
+  - Look "dark fantasy" dell'hub (`#hub-menu` con immagine `assets/images/reshapiam.png`)
+  - **Riusa classi esistenti** quando possibile (`.menu-btn`, `.pc-*`, `.dialogue-*`, `.interact-prompt`, `.inventory-*`) per coerenza
+  - Z‑index: canvas sotto → mirino/prompt → overlay PC/dialogo/inventory sopra tutto
 
 ## Vincoli Specifici del Progetto
 
@@ -91,13 +142,17 @@ Queste linee guida servono per rendere gli agent AI subito produttivi in questo 
 ## Punti di Estensione Consigliati
 
 - **Nuovi oggetti interattivi**:
-  - Aggiungi la definizione in `loadModels()` con un `id` univoco e `category: "usable"` (o simile).
-  - Gestisci il comportamento in `handleInteract()` (o funzioni collegate) usando quell’`id`.
-  - Se serve, aggiungi elementi UI dedicati in `index.html` e stili in `styles/main.css`.
+  - Aggiungi entry in [scripts/content/models.js](scripts/content/models.js) con `id` univoco e `category: "usable"`
+  - Gestisci comportamento in [scripts/systems/interactions.js](scripts/systems/interactions.js) usando l'`id`
+  - Per oggetti equipaggiabili, aggiungi metadata in [item-registry.js](scripts/data/item-registry.js)
 - **Nuove impostazioni**:
-  - Aggiungi un nuovo controllo in `#settings-menu` (slider/select).
-  - In `scripts/menu.js` ascolta l’`input/change` e chiama una nuova funzione globale (es. `updateGraphicsQuality`).
-  - Implementa quella funzione in `scripts/game.js` seguendo il pattern di `updateMouseSensitivity`.
+  - Aggiungi controllo in `#settings-menu` (slider/select) in [index.html](index.html)
+  - In [scripts/menu.js](scripts/menu.js) ascolta l'`input/change` e chiama funzione globale
+  - Implementa funzione in [scripts/game.js](scripts/game.js) seguendo pattern `updateMouseSensitivity`
+- **Nuovi sistemi di gameplay**:
+  - Crea modulo in `scripts/systems/` o `scripts/gameplay/` con pattern IIFE + namespace `window.RSG.*`
+  - Esporta `init(opts)` e `update(delta)`, chiama da [scripts/game.js](scripts/game.js) orchestrator
+  - Accedi a `state` passato in `init()`, non usare globals diretti
 
 ## Librerie di Terze Parti
 

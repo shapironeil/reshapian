@@ -20,7 +20,7 @@
       <div id="game-canvas"></div>
       <div id="back-menu-btn" class="back-button">MENU</div>
       <!-- Schermo PC interattivo -->
-      <div id="pc-screen" class="pc-screen">
+      <div id="pc-screen" class="pc-screen" style="display: none">
         <div class="pc-shell">
           <div class="pc-screen-area">
             <div class="pc-window">
@@ -90,6 +90,18 @@
       <!-- HUD: inventory tip + health bar -->
       <div class="hud hud-bottom-left"><span class="hud-tip">TAB - Apri inventario</span></div>
       <div class="health-bar"><div id="health-fill" class="health-fill"></div></div>
+      
+      <!-- HUD Munizioni -->
+      <div class="ammo-counter" id="ammo-counter" style="display: none">
+        <div class="ammo-mag"><span id="ammo-current">15</span></div>
+        <div class="ammo-separator">/</div>
+        <div class="ammo-reserve"><span id="ammo-reserve">45</span></div>
+      </div>
+      
+      <!-- Reload indicator -->
+      <div class="reload-indicator" id="reload-indicator" style="display: none">
+        <span>🔄 RICARICA...</span>
+      </div>
     </div>
 
     <div id="select-game-menu" class="menu-container" style="display: none">
@@ -211,6 +223,7 @@
     <script src="scripts/content/models.js"></script>
     <script src="scripts/content/environments.js"></script>
     <script src="scripts/ui/hud.js"></script>
+    <script src="scripts/ui/notifications.js"></script>
     <script src="scripts/ui/inventory-ui.js"></script>
     <script src="scripts/ui/pc-ui.js"></script>
     <script src="scripts/ui/dialogue-ui.js"></script>

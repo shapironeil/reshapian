@@ -16,17 +16,17 @@ class EquipmentManager {
 
     // Define offset positions and rotations for each slot
     // These are relative to player position (first-person view)
-    // FPS STANDARDS: Based on CS:GO, Call of Duty, Valorant positioning
+    // FPS STANDARDS: Optimized for visibility and realism
     this.slotConfigs = {
       'right-hand': {
-        position: [0.4, -0.45, -0.5],  // MOVED FORWARD: Z from -0.65 to -0.5 (closer to camera)
-        rotation: [-0.05, -0.1, 0.05],  // Slight tilt for natural feel (CS:GO style)
-        scale: 2.0,  // LARGER viewmodel (30-35% screen coverage like AAA FPS)
+        position: [0.4, -0.55, -0.2],  // MOLTO PIÙ AVANTI: Z -0.2 (vicino alla camera)
+        rotation: [-0.1, -0.15, 0.05],  // Canna in avanti, leggera inclinazione naturale
+        scale: 1.5,  // RIDOTTO: era troppo grande (2.2 → 1.5)
       },
       'left-hand': {
-        position: [-0.4, -0.45, -0.5],  // MOVED FORWARD: Mirror of right-hand
-        rotation: [-0.05, Math.PI + 0.1, -0.05],  // Mirrored with natural tilt
-        scale: 2.0,  // Same size as right-hand
+        position: [-0.4, -0.55, -0.2],  // MOLTO PIÙ AVANTI: Stesso Z della destra
+        rotation: [-0.1, Math.PI + 0.15, -0.05],  // CANNA AVANTI: rotazione Y corretta per far puntare avanti
+        scale: 1.5,  // RIDOTTO: stesso size della destra
       },
       'back': {
         position: [0, 0.15, 0.5],  // over shoulder, further back
@@ -34,9 +34,9 @@ class EquipmentManager {
         scale: 1.0,
       },
       'head': {
-        position: [0, 0.1, 0],  // Centered on head, will rotate with camera
+        position: [0, 0.25, 0],  // ALZATO: Y da 0.1 a 0.25 (più in alto sulla testa)
         rotation: [0, 0, 0],
-        scale: 1.0,  // Hat will use its own scale from registry
+        scale: 0.7,  // RIDOTTO: da 1.0 a 0.7 (30% più piccolo)
         followCamera: true  // FLAG: This slot rotates WITH camera pitch/yaw
       },
       'torso': {
@@ -98,7 +98,13 @@ class EquipmentManager {
         mesh.rotation.set(...config.rotation);
         // Use the scale from modelRegistry (already calibrated for realistic sizing)
         const scale = modelData.scale || config.scale;
-        mesh.scale.set(scale, scale, scale);
+        
+        // MIRROR FIX: Left-hand deve essere specchiato (scala X negativa)
+        if (slotType === 'left-hand') {
+          mesh.scale.set(-scale, scale, scale);  // Specchia sull'asse X
+        } else {
+          mesh.scale.set(scale, scale, scale);
+        }
 
         // Store reference
         this.equippedMeshes[slotType] = {

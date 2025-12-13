@@ -9,6 +9,14 @@ document.addEventListener("DOMContentLoaded", function () {
   const selectGameMenu = document.getElementById("select-game-menu");
   const settingsMenu = document.getElementById("settings-menu");
   const environmentSelect = document.getElementById("environment-select");
+  const mapList = document.getElementById("map-list");
+  const createMapBtn = document.getElementById("create-map-btn");
+  const mapSettingsPanel = document.getElementById("map-settings");
+  const mapNameInput = document.getElementById("map-name");
+  const mapSizeInput = document.getElementById("map-size");
+  const mapTimeSelect = document.getElementById("map-time");
+  const saveMapBtn = document.getElementById("save-map-btn");
+  const cancelMapBtn = document.getElementById("cancel-map-btn");
 
   const startGameBtn = document.getElementById("start-game-btn");
   const selectGameBtn = document.getElementById("select-game-btn");
@@ -90,6 +98,7 @@ document.addEventListener("DOMContentLoaded", function () {
   selectGameBtn.addEventListener("click", function () {
     hubMenu.style.display = "none";
     selectGameMenu.style.display = "flex";
+    renderMapList();
   });
 
   // Impostazioni (pulsante opzionale)
@@ -119,9 +128,37 @@ document.addEventListener("DOMContentLoaded", function () {
       console.log("⬅️ Indietro dai sottomenu");
       selectGameMenu.style.display = "none";
       settingsMenu.style.display = "none";
+      mapSettingsPanel.style.display = "none";
       hubMenu.style.display = "flex";
     });
   });
+
+  if (createMapBtn) {
+    createMapBtn.addEventListener("click", function () {
+      mapSettingsPanel.style.display = "block";
+      mapNameInput.value = "";
+      mapSizeInput.value = 500;
+      mapTimeSelect.value = "mattina";
+    });
+  }
+
+  if (cancelMapBtn) {
+    cancelMapBtn.addEventListener("click", function () {
+      mapSettingsPanel.style.display = "none";
+    });
+  }
+
+  if (saveMapBtn) {
+    saveMapBtn.addEventListener("click", function () {
+      const name = mapNameInput.value && mapNameInput.value.trim() ? mapNameInput.value.trim() : "Nuova Mappa";
+      const size = parseInt(mapSizeInput.value, 10) || 500;
+      const time = mapTimeSelect.value || "mattina";
+      createNewMap({ name, size, time });
+      mapSettingsPanel.style.display = "none";
+      renderMapList();
+      setStatusMessage("Mappa creata: " + name);
+    });
+  }
 
   // Aggiorna valori impostazioni
   mouseSensitivity.addEventListener("input", function () {
@@ -149,4 +186,79 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     });
   });
+
+  function renderMapList() {
+    if (!mapList) return;
+    mapList.innerHTML = "";
+    const mapData = loadMapMeta();
+    const hasSaved = !!localStorage.getItem("architectMap");
+    const items = [];
+    if (hasSaved) {
+      items.push({ id: "local", label: mapData.name || "Mappa locale", meta: mapData });
+    }
+    if (!items.length) {
+      const empty = document.createElement("div");
+      empty.className = "map-item disabled";
+      empty.textContent = "Nessuna mappa salvata";
+      mapList.appendChild(empty);
+      return;
+    }
+    items.forEach((item) => {
+      const div = document.createElement("div");
+      div.className = "map-item";
+      const title = document.createElement("div");
+      title.className = "map-title";
+      title.textContent = item.label;
+      const meta = document.createElement("div");
+      meta.className = "map-meta";
+      meta.textContent = `Dim: ${item.meta.size || "?"} · Orario: ${item.meta.time || "n/d"}`;
+      const loadBtn = document.createElement("button");
+      loadBtn.className = "menu-btn small";
+      loadBtn.textContent = "CARICA";
+      loadBtn.onclick = function () {
+        selectGameMenu.style.display = "none";
+        gameContainer.style.display = "block";
+        if (typeof window.clearArchitectMap === "function") {
+          // no op when loading existing map; we rely on startGame/loadMap
+        }
+        if (typeof startGame === "function") {
+          startGame();
+        }
+      };
+      div.appendChild(title);
+      div.appendChild(meta);
+      div.appendChild(loadBtn);
+      mapList.appendChild(div);
+    });
+  }
+
+  function createNewMap(meta) {
+    try {
+      localStorage.removeItem("architectMap");
+      localStorage.setItem("architectMapMeta", JSON.stringify(meta));
+      if (typeof window.clearArchitectMap === "function") {
+        window.clearArchitectMap();
+      }
+    } catch (e) {
+      console.warn("Errore creazione mappa", e);
+    }
+  }
+
+  function loadMapMeta() {
+    try {
+      const raw = localStorage.getItem("architectMapMeta");
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function setStatusMessage(msg) {
+    try {
+      const el = document.querySelector(".architect-status");
+      if (el) el.textContent = msg;
+    } catch (e) {
+      // ignore
+    }
+  }
 });

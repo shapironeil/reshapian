@@ -1,6 +1,25 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
 
+// Hot reload solo in dev (npm run dev:watch)
+if (process.env.ELECTRON_DEV === 'true') {
+    try {
+        require('electron-reload')(
+            __dirname,
+            {
+                electron: path.join(__dirname, 'node_modules', '.bin', process.platform === 'win32' ? 'electron.cmd' : 'electron'),
+                awaitWriteFinish: true,
+                hardReset: true,
+                // Ricarica renderer e main, ignora asset pesanti
+                ignored: [/node_modules/, /assets\/models/],
+            }
+        );
+        console.log('🔁 Hot reload attivo (ELECTRON_DEV=true)');
+    } catch (e) {
+        console.warn('Hot reload non attivo:', e);
+    }
+}
+
 let mainWindow;
 
 function createWindow() {

@@ -56,12 +56,9 @@ window.RSG.systems = window.RSG.systems || {};
           models.push(model);
 
           var bbox = new THREE.Box3().setFromObject(model);
-          var size = new THREE.Vector3();
-          bbox.getSize(size);
-          var radiusXZ = Math.max(size.x, size.z) / 2;
           collisionObjects.push({
             model: model,
-            radius: radiusXZ + 0.3,
+            box: bbox,
           });
 
           loadedCount++;

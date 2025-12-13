@@ -14,19 +14,33 @@ class EquipmentManager {
     this.equippedMeshes = {}; // { 'right-hand': { mesh, item }, ... }
     this.loader = new THREE.GLTFLoader();
 
+    // Per-item fine tuning for position/rotation/scale (additive on slot config)
+    this.itemOverrides = {
+      pistol_beretta: {
+        position: [0.0, 0.012, 0.02],
+        rotation: [-0.01, 0.0, 0.0],
+        scale: 0.94,
+      },
+      pistol_43: {
+        position: [0.0, 0.01, -0.005],
+        rotation: [0.0, -0.015, 0.0],
+        scale: 1.12,
+      },
+    };
+
     // Define offset positions and rotations for each slot
     // These are relative to player position (first-person view)
     // FPS STANDARDS: Optimized for visibility and realism
     this.slotConfigs = {
       'right-hand': {
-        position: [0.4, -0.55, -0.2],  // MOLTO PIÙ AVANTI: Z -0.2 (vicino alla camera)
-        rotation: [-0.1, -0.15, 0.05],  // Canna in avanti, leggera inclinazione naturale
-        scale: 1.5,  // RIDOTTO: era troppo grande (2.2 → 1.5)
+        position: [0.32, -0.48, -0.22],  // leggermente più vicino e sopra per ridurre ingombro
+        rotation: [-0.03, -0.1, 0.04],
+        scale: 1.5,
       },
       'left-hand': {
-        position: [-0.4, -0.55, -0.2],  // MOLTO PIÙ AVANTI: Stesso Z della destra
-        rotation: [-0.1, Math.PI + 0.15, -0.05],  // CANNA AVANTI: rotazione Y corretta per far puntare avanti
-        scale: 1.5,  // RIDOTTO: stesso size della destra
+        position: [-0.32, -0.48, -0.22],
+        rotation: [-0.03, Math.PI + 0.1, -0.04],
+        scale: 1.5,
       },
       'back': {
         position: [0, 0.15, 0.5],  // over shoulder, further back
@@ -94,16 +108,43 @@ class EquipmentManager {
 
         // Apply slot configuration
         const config = this.slotConfigs[slotType];
-        mesh.position.set(...config.position);
-        mesh.rotation.set(...config.rotation);
-        // Use the scale from modelRegistry (already calibrated for realistic sizing)
-        const scale = modelData.scale || config.scale;
+        const override = this.itemOverrides[item.id] || null;
+
+        // Merge slot config with per-item override (additive for pos/rot, multiplicative for scale)
+        const finalPosition = override && override.position
+          ? [
+              config.position[0] + override.position[0],
+              config.position[1] + override.position[1],
+              config.position[2] + override.position[2],
+            ]
+          : config.position;
+
+        const finalRotation = override && override.rotation
+          ? [
+              config.rotation[0] + override.rotation[0],
+              config.rotation[1] + override.rotation[1],
+              config.rotation[2] + override.rotation[2],
+            ]
+          : config.rotation;
+
+        const baseScale = modelData.scale || config.scale;
+        const finalScale = override && override.scale ? baseScale * override.scale : baseScale;
+
+        const finalConfig = {
+          position: finalPosition,
+          rotation: finalRotation,
+          scale: finalScale,
+          followCamera: config.followCamera,
+        };
+
+        mesh.position.set(...finalConfig.position);
+        mesh.rotation.set(...finalConfig.rotation);
         
         // MIRROR FIX: Left-hand deve essere specchiato (scala X negativa)
         if (slotType === 'left-hand') {
-          mesh.scale.set(-scale, scale, scale);  // Specchia sull'asse X
+          mesh.scale.set(-finalConfig.scale, finalConfig.scale, finalConfig.scale);  // Specchia sull'asse X
         } else {
-          mesh.scale.set(scale, scale, scale);
+          mesh.scale.set(finalConfig.scale, finalConfig.scale, finalConfig.scale);
         }
 
         // Store reference
@@ -111,7 +152,7 @@ class EquipmentManager {
           mesh,
           item,
           slotType,
-          config,
+          config: finalConfig,
         };
 
         // Add to scene

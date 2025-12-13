@@ -7,6 +7,10 @@ window.RSG.systems = window.RSG.systems || {};
 (function () {
   var isInitialized = false;
   var listeners = [];
+  var wasPointerLockedBeforeShift = false;
+  var shiftMouseMode = false;
+  var lastSpaceTime = 0;
+  var DOUBLE_SPACE_MS = 350;
 
   function addListener(target, type, handler, options) {
     target.addEventListener(type, handler, options);
@@ -39,6 +43,8 @@ window.RSG.systems = window.RSG.systems || {};
     var LOOK_SPEED = constants.LOOK_SPEED || 0.002;
     var actions = opts.actions || {};
 
+    var canvasContainer = null;
+
     function isGameplayMode() {
       if (!state) return true;
       if (state.mode && state.mode !== "gameplay") return false;
@@ -46,26 +52,49 @@ window.RSG.systems = window.RSG.systems || {};
       return true;
     }
 
+    function isMovementAllowed() {
+      if (!state) return true;
+      if (state.mode === "architect") return true;
+      return isGameplayMode();
+    }
+
     function onKeyDown(event) {
       switch (event.code) {
         case "KeyW":
-          if (isGameplayMode()) state.input.moveForward = true;
+          if (isMovementAllowed()) state.input.moveForward = true;
           break;
         case "KeyS":
-          if (isGameplayMode()) state.input.moveBackward = true;
+          if (isMovementAllowed()) state.input.moveBackward = true;
           break;
         case "KeyA":
-          if (isGameplayMode()) state.input.moveLeft = true;
+          if (isMovementAllowed()) state.input.moveLeft = true;
           break;
         case "KeyD":
-          if (isGameplayMode()) state.input.moveRight = true;
+          if (isMovementAllowed()) state.input.moveRight = true;
           break;
         case "Space":
+          var now = performance.now();
+          if (state.mode === "architect") {
+            if (now - lastSpaceTime < DOUBLE_SPACE_MS) {
+              state.player.isFlying = !state.player.isFlying;
+              state.player.velocity.y = 0;
+            }
+            lastSpaceTime = now;
+            state.input.flyUp = true;
+            event.preventDefault();
+            break;
+          }
+          lastSpaceTime = now;
           if (isGameplayMode() && state.player.canJump) {
             state.player.velocity.y = opts.constants.JUMP_VELOCITY;
             state.player.canJump = false;
           }
           event.preventDefault();
+          break;
+        case "ControlLeft":
+          if (state.mode === "architect" && state.player && state.player.isFlying) {
+            state.input.flyDown = true;
+          }
           break;
         case "KeyQ":
           if (state.player.hasGun && isGameplayMode() && typeof actions.shoot === "function") {
@@ -86,6 +115,23 @@ window.RSG.systems = window.RSG.systems || {};
         case "KeyR":
           if (isGameplayMode() && typeof actions.reload === "function") {
             actions.reload();
+          }
+          break;
+        case "F2":
+          if (typeof actions.toggleArchitectMode === "function") {
+            actions.toggleArchitectMode();
+          }
+          break;
+        case "ShiftLeft":
+        case "ShiftRight":
+          if (!shiftMouseMode) {
+            shiftMouseMode = true;
+            wasPointerLockedBeforeShift = !!document.pointerLockElement;
+            if (document.pointerLockElement) {
+              document.exitPointerLock();
+            }
+            state.input.moveForward = state.input.moveBackward = false;
+            state.input.moveLeft = state.input.moveRight = false;
           }
           break;
         case "Escape":
@@ -134,11 +180,25 @@ window.RSG.systems = window.RSG.systems || {};
             break;
         }
       }
+
+      if (event.code === "Space" && state.mode === "architect") {
+        state.input.flyUp = false;
+      }
+      if ((event.code === "ControlLeft") && state.mode === "architect") {
+        state.input.flyDown = false;
+      }
+      if (event.code === "ShiftLeft" || event.code === "ShiftRight") {
+        shiftMouseMode = false;
+        if (wasPointerLockedBeforeShift && canvasContainer && canvasContainer.requestPointerLock) {
+          canvasContainer.requestPointerLock();
+        }
+        wasPointerLockedBeforeShift = false;
+      }
     }
 
     function onMouseMove(event) {
       if (!document.pointerLockElement) return;
-      if (!isGameplayMode()) return;
+      if (!isGameplayMode() && state.mode !== "architect") return;
 
       var camera = opts.getCamera();
       if (!camera) return;
@@ -163,7 +223,7 @@ window.RSG.systems = window.RSG.systems || {};
     addListener(document, "keyup", onKeyUp);
     addListener(document, "mousemove", onMouseMove);
 
-    var canvasContainer = document.querySelector("#game-canvas");
+    canvasContainer = document.querySelector("#game-canvas");
     if (canvasContainer) {
       addListener(canvasContainer, "click", onCanvasClick);
     }

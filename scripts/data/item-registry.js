@@ -110,17 +110,17 @@ var ItemRegistry = {
    */
   registerAllModels: function(equipmentManager) {
     const scaleOverrides = {
-      // Pistols: FPS STANDARD viewmodel size (works with 2.0x slot scale)
-      pistol_beretta: 0.004,  // Base scale * 2.0 slot = visible FPS-style weapon
-      pistol_43: 0.0035,      // Base scale * 2.0 slot = visible FPS-style weapon
-      // Hat: smaller on head, will use 1.0 default
-      helmet_tactical: 0.15,  // cowboy hat base scale
-      // Sword: longer, visible over shoulder
-      sword_longsword: 0.4,   // 1.4m longsword, scale accordingly
+      // Pistols: invert again (Beretta più piccola, Tactical più grande visibile)
+      pistol_beretta: 0.0036,
+      pistol_43: 0.0054,
+      // Hat: ridotto leggermente per testa
+      helmet_tactical: 0.14,
+      // Sword: 1.2-1.3m in scena
+      sword_longsword: 0.35,
       // Accessories
       laptop: 0.35,
       barricade: 1.0,
-      grenade_frag: 0.003,    // small grenade
+      grenade_frag: 0.003,
     };
 
     Object.entries(this.items).forEach(([id, item]) => {

@@ -24,6 +24,8 @@ function createInitialState() {
       moveBackward: false,
       moveLeft: false,
       moveRight: false,
+      flyUp: false,
+      flyDown: false,
     },
     player: {
       canJump: true,
@@ -31,6 +33,7 @@ function createInitialState() {
       hasGun: false,
       heldWeapon: null,
       health: 100,
+      isFlying: false,
       // Sistema munizioni
       ammo: {
         '9mm': 45,        // Beretta (15 x 3 caricatori)
@@ -53,6 +56,7 @@ function createInitialState() {
       isInDialogue: false,
       isInventoryOpen: false,
       currentDetailItem: null,
+      isArchitectMode: false,
     },
     settings: {
       mouseSensitivity: 1.0,
@@ -130,6 +134,12 @@ function isGameplayMode() {
   if (state.mode && state.mode !== "gameplay") return false;
   if (state.ui && (state.ui.isUsingPC || state.ui.isInDialogue || state.ui.isInventoryOpen)) return false;
   return true;
+}
+
+function isMovementAllowed() {
+  if (!state) return true;
+  if (state.mode === "architect") return true;
+  return isGameplayMode();
 }
 
 // Stato runtime: ricreato a ogni startGame
@@ -278,6 +288,15 @@ window.stopGame = function () {
     window.RSG.systems.environment.teardownCurrent();
   }
 
+  if (window.RSG && window.RSG.ui && window.RSG.ui.architect && typeof window.RSG.ui.architect.setActive === "function") {
+    window.RSG.ui.architect.setActive(false);
+  }
+
+  if (state && state.ui) {
+    state.ui.isArchitectMode = false;
+    state.mode = "gameplay";
+  }
+
   // Evita accumulo di listener tra run
   window.removeEventListener("resize", onWindowResize);
 
@@ -371,6 +390,9 @@ function initThreeJS() {
   // Sistema interazioni (prompt + routing PC/dialogo/pickup)
   setupInteractionsSystem();
 
+  // Modalità architetto (editor scena)
+  setupArchitectMode();
+
   // Sistema AI (animali + robot follow)
   setupAISystem();
 
@@ -392,13 +414,44 @@ function setupMovementSystem() {
       return camera;
     },
     resolveCollisions: resolveCollisions,
-    isGameplayMode: isGameplayMode,
+    isGameplayMode: isMovementAllowed,
     constants: {
       MOVE_SPEED: MOVE_SPEED,
       GRAVITY: GRAVITY,
       PLAYER_HEIGHT: PLAYER_HEIGHT,
     },
   });
+}
+
+function setupArchitectMode() {
+  if (!window.RSG || !window.RSG.ui || !window.RSG.ui.architect) {
+    console.warn("⚠️ Architect mode non disponibile (scripts/ui/architect-mode.js non caricato?)");
+    return;
+  }
+
+  window.RSG.ui.architect.init({
+    state: state,
+    scene: scene,
+    camera: camera,
+    renderer: renderer,
+    collisionObjects: collisionObjects,
+    getAssetList: function () {
+      if (window.RSG && window.RSG.content && window.RSG.content.models && typeof window.RSG.content.models.getFurniture === "function") {
+        return window.RSG.content.models.getFurniture();
+      }
+      return [];
+    },
+  });
+
+  // Toggle globale per menu/input
+  window.toggleArchitectMode = function () {
+    var desired = !(state && state.ui ? state.ui.isArchitectMode : false);
+    window.RSG.ui.architect.setActive(desired);
+    if (state && state.ui) {
+      state.ui.isArchitectMode = desired;
+      state.mode = desired ? "architect" : "gameplay";
+    }
+  };
 }
 
 function setupInventorySystem() {
@@ -845,12 +898,17 @@ function setupControls() {
           closeDialogue();
         }
       },
+      toggleArchitectMode: function () {
+        if (typeof window.toggleArchitectMode === "function") {
+          window.toggleArchitectMode();
+        }
+      },
     },
   });
 }
 
 function updateMovement(delta) {
-  if (!isGameplayMode()) return;
+  if (!isMovementAllowed()) return;
   velocity.y -= GRAVITY * delta;
 
   // Input: da questo punto in poi lo stato è la sorgente di verità (input system aggiorna state.input)
@@ -904,20 +962,46 @@ function resolveCollisions(newPosition) {
   var corrected = newPosition.clone();
 
   collisionObjects.forEach(function (obj) {
-    if (!obj.model || typeof obj.radius !== "number") return;
+    if (!obj.model) return;
+    if (obj.model.userData && obj.model.userData.collidable === false) return;
+    var box = new THREE.Box3().setFromObject(obj.model);
+    if (!box.isEmpty()) {
+      // Skip if player is far above/below the box
+      if (corrected.y > box.max.y + PLAYER_HEIGHT || corrected.y < box.min.y - PLAYER_HEIGHT) return;
 
-    var objPos = obj.model.position;
-    var dx = corrected.x - objPos.x;
-    var dz = corrected.z - objPos.z;
-    var dist = Math.sqrt(dx * dx + dz * dz);
-    var minDist = (obj.radius || 0) + PLAYER_RADIUS;
+      var nearest = new THREE.Vector3(
+        Math.max(box.min.x, Math.min(corrected.x, box.max.x)),
+        Math.max(box.min.y, Math.min(corrected.y, box.max.y)),
+        Math.max(box.min.z, Math.min(corrected.z, box.max.z))
+      );
 
-    if (dist > 0 && dist < minDist) {
-      var overlap = minDist - dist;
-      var nx = dx / dist;
-      var nz = dz / dist;
-      corrected.x += nx * overlap;
-      corrected.z += nz * overlap;
+      var dx = corrected.x - nearest.x;
+      var dz = corrected.z - nearest.z;
+      var distSq = dx * dx + dz * dz;
+      var rad = PLAYER_RADIUS;
+
+      if (distSq < rad * rad) {
+        var dist = Math.max(Math.sqrt(distSq), 0.0001);
+        var overlap = rad - dist;
+        var nx = dx / dist;
+        var nz = dz / dist;
+        // If inside the box (dist very small), push out along smallest axis
+        if (distSq === 0) {
+          var penX = Math.min(Math.abs(box.max.x - corrected.x), Math.abs(corrected.x - box.min.x));
+          var penZ = Math.min(Math.abs(box.max.z - corrected.z), Math.abs(corrected.z - box.min.z));
+          if (penX < penZ) {
+            nx = corrected.x - nearest.x >= 0 ? 1 : -1;
+            nz = 0;
+            overlap = rad + penX;
+          } else {
+            nx = 0;
+            nz = corrected.z - nearest.z >= 0 ? 1 : -1;
+            overlap = rad + penZ;
+          }
+        }
+        corrected.x += nx * overlap;
+        corrected.z += nz * overlap;
+      }
     }
   });
 
@@ -1109,6 +1193,11 @@ function animate() {
   // Update equipped items (3D rendering)
   if (equipmentManager) {
     equipmentManager.updateAllEquipped();
+  }
+
+  // Architect mode live updates
+  if (window.RSG && window.RSG.ui && window.RSG.ui.architect && typeof window.RSG.ui.architect.update === "function") {
+    window.RSG.ui.architect.update(delta);
   }
 
   // Update ammo HUD

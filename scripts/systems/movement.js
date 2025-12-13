@@ -37,12 +37,18 @@ window.RSG.systems = window.RSG.systems || {};
     var MOVE_SPEED = ctx.constants.MOVE_SPEED || 10.0;
     var GRAVITY = ctx.constants.GRAVITY || 20.0;
     var PLAYER_HEIGHT = ctx.constants.PLAYER_HEIGHT || 1.7;
+    var FLY_SPEED = ctx.constants.FLY_SPEED || MOVE_SPEED;
 
     var input = state.input || {};
     var velocity = state.player && state.player.velocity ? state.player.velocity : { x: 0, y: 0, z: 0 };
+    var isFlying = state.player && state.player.isFlying;
 
-    // Gravity
-    velocity.y -= GRAVITY * delta;
+    // Gravity only when not flying
+    if (!isFlying) {
+      velocity.y -= GRAVITY * delta;
+    } else {
+      velocity.y = 0;
+    }
 
     // Direction vectors (camera basis, flattened on Y)
     var forward = new THREE.Vector3(0, 0, -1);
@@ -62,6 +68,11 @@ window.RSG.systems = window.RSG.systems || {};
     if (input.moveLeft) newPosition.addScaledVector(right, -MOVE_SPEED * delta);
     if (input.moveRight) newPosition.addScaledVector(right, MOVE_SPEED * delta);
 
+    if (isFlying) {
+      if (input.flyUp) newPosition.y += FLY_SPEED * delta;
+      if (input.flyDown) newPosition.y -= FLY_SPEED * delta;
+    }
+
     // Collisions (if provided)
     if (typeof ctx.resolveCollisions === "function") {
       newPosition = ctx.resolveCollisions(newPosition) || newPosition;
@@ -72,13 +83,19 @@ window.RSG.systems = window.RSG.systems || {};
     camera.position.z = newPosition.z;
 
     // Vertical
-    camera.position.y += velocity.y * delta;
-    if (camera.position.y <= PLAYER_HEIGHT) {
-      camera.position.y = PLAYER_HEIGHT;
+    if (isFlying) {
+      camera.position.y = Math.max(PLAYER_HEIGHT * 0.3, newPosition.y);
       velocity.y = 0;
       if (state.player) state.player.canJump = true;
-    } else if (state.player) {
-      state.player.canJump = false;
+    } else {
+      camera.position.y += velocity.y * delta;
+      if (camera.position.y <= PLAYER_HEIGHT) {
+        camera.position.y = PLAYER_HEIGHT;
+        velocity.y = 0;
+        if (state.player) state.player.canJump = true;
+      } else if (state.player) {
+        state.player.canJump = false;
+      }
     }
 
     // Persist velocity back into state (legacy refs already point to it)

@@ -42,14 +42,22 @@ window.RSG.systems = window.RSG.systems || {};
     var scene = ctx.getScene();
     if (!camera || !scene) return;
 
-    // Supporta sia state.inventory.equipped che state.equippedItems
+    // Supporta sia state.inventory.equipped che state.equippedItems e fallback legacy (heldWeapon)
     var equipped = ctx.state.equippedItems || (ctx.state.inventory ? ctx.state.inventory.equipped : null);
-    if (!equipped) {
+    var weapon = null;
+    if (equipped) {
+      weapon = equipped['right-hand'] || equipped.rightHand || null;
+    }
+    if (!weapon && ctx.state.player && ctx.state.player.heldWeapon) {
+      weapon = { id: ctx.state.player.heldWeapon };
+    }
+
+    if (!weapon) {
       console.log("❌ Nessuna arma equipaggiata");
       return;
     }
     
-    var weaponInfo = resolveWeaponInfo(equipped, ctx.weaponDefs);
+    var weaponInfo = ctx.weaponDefs[weapon.id];
     if (!weaponInfo || weaponInfo.type !== "weapon") {
       console.log("❌ Oggetto equipaggiato non è un'arma");
       return;
@@ -102,8 +110,6 @@ window.RSG.systems = window.RSG.systems || {};
     scene.add(bulletMesh);
 
     // Ottieni weapon da entrambi i sistemi
-    var weapon = equipped['right-hand'] || equipped.rightHand;
-    
     ctx.bullets.push({
       mesh: bulletMesh,
       direction: direction.clone(),

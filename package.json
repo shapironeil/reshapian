@@ -1,0 +1,21 @@
+{
+  "name": "shappa-games",
+  "version": "1.0.0",
+  "description": "Gioco 3D in prima persona con Three.js",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron ."
+  },
+  "keywords": [
+    "game",
+    "3d",
+    "threejs",
+    "electron"
+  ],
+  "author": "Marco",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.3.3"
+  }
+}

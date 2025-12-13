@@ -1,0 +1,26 @@
+# node_modules - dipendenze npm
+node_modules/
+
+# File di lock
+package-lock.json
+
+# Cartelle di build
+dist/
+build/
+out/
+
+# File di log
+*.log
+npm-debug.log*
+
+# File temporanei
+.DS_Store
+Thumbs.db
+*.tmp
+*.temp
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

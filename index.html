@@ -75,6 +75,12 @@
       <!-- Mirino al centro dello schermo -->
       <div id="crosshair" class="crosshair">+</div>
 
+      <!-- Environment label -->
+      <div id="environment-label" class="environment-label" style="display: none"></div>
+
+      <!-- Fade overlay for environment switches -->
+      <div id="environment-fade" class="environment-fade" style="display: none"></div>
+
       <!-- Prompt interazione -->
       <div id="interact-prompt" class="interact-prompt" style="display: none">E - Interagisci</div>
 
@@ -117,6 +123,10 @@
               <option value="medium" selected>Media</option>
               <option value="high">Alta</option>
             </select>
+          </div>
+          <div class="setting-item">
+            <label>Ambiente:</label>
+            <select id="environment-select"></select>
           </div>
         </div>
         <button class="back-btn">INDIETRO</button>
@@ -199,6 +209,7 @@
     <script src="scripts/gameplay/inventory.js"></script>
     <script src="scripts/gameplay/equipment-manager.js"></script>
     <script src="scripts/content/models.js"></script>
+    <script src="scripts/content/environments.js"></script>
     <script src="scripts/ui/hud.js"></script>
     <script src="scripts/ui/inventory-ui.js"></script>
     <script src="scripts/ui/pc-ui.js"></script>
@@ -209,6 +220,7 @@
     <script src="scripts/systems/projectiles.js"></script>
     <script src="scripts/systems/interactions.js"></script>
     <script src="scripts/systems/ai.js"></script>
+    <script src="scripts/systems/environment.js"></script>
     <script src="scripts/game.js"></script>
     <script src="scripts/menu.js"></script>
   </body>

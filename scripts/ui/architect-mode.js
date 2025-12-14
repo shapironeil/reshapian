@@ -5,6 +5,7 @@ window.RSG = window.RSG || {};
 window.RSG.ui = window.RSG.ui || {};
 
 (function () {
+  console.log("📐 architect-mode.js caricato");
   var ctx = null;
   var isActive = false;
   var loader = null;
@@ -14,8 +15,8 @@ window.RSG.ui = window.RSG.ui || {};
   var selectedLabel = null;
   var selectedMesh = null;
   var placedMeshes = [];
-  var raycaster = new THREE.Raycaster();
-  var pointer = new THREE.Vector2();
+  var raycaster = null;
+  var pointer = null;
   var mapLoaded = false;
 
   // UI elements for transforms and persistence
@@ -31,7 +32,9 @@ window.RSG.ui = window.RSG.ui || {};
   var presetBtn = null;
   var bboxHelper = null;
   var gizmoArrows = [];
+  var browserContent = null; // container del file browser
   var isDragging = false;
+  var isShiftSelecting = false;
   var dragPlane = null;
   var dragOffset = null;
   var dragStartY = 0;
@@ -43,14 +46,241 @@ window.RSG.ui = window.RSG.ui || {};
   var defaultsStore = {};
   var mapMeta = {};
 
+  function setTypingArchitect(flag) {
+    if (ctx && ctx.state && ctx.state.ui) {
+      ctx.state.ui.isTypingArchitect = !!flag;
+    }
+    if (flag) {
+      if (document.exitPointerLock) {
+        document.exitPointerLock();
+      }
+      if (ctx && ctx.state && ctx.state.input) {
+        ctx.state.input.moveForward = false;
+        ctx.state.input.moveBackward = false;
+        ctx.state.input.moveLeft = false;
+        ctx.state.input.moveRight = false;
+      }
+    }
+  }
+
   var SNAP_POS = 0.25;
   var PLACE_DISTANCE = 5;
+
+  function markSelectableTree(root, sourceFile) {
+    if (!root) return;
+    var file = sourceFile || (root.userData && root.userData.sourceFile) || null;
+    try {
+      root.userData = root.userData || {};
+      root.userData._architectRoot = true;
+      root.traverse(function (obj) {
+        if (!obj) return;
+        obj.userData = obj.userData || {};
+        obj.userData._architectSelectable = true;
+        if (file && !obj.userData.sourceFile) {
+          obj.userData.sourceFile = file;
+        }
+      });
+    } catch (e) {
+      // Fallback: almeno marca il root
+      root.userData = root.userData || {};
+      root.userData._architectRoot = true;
+      root.userData._architectSelectable = true;
+      if (file && !root.userData.sourceFile) root.userData.sourceFile = file;
+    }
+  }
+
+  function updatePointerFromEvent(event) {
+    var rect = null;
+    try {
+      if (ctx && ctx.renderer && ctx.renderer.domElement && typeof ctx.renderer.domElement.getBoundingClientRect === "function") {
+        rect = ctx.renderer.domElement.getBoundingClientRect();
+      }
+    } catch (e) {
+      rect = null;
+    }
+
+    var left = rect ? rect.left : 0;
+    var top = rect ? rect.top : 0;
+    var width = rect ? rect.width : window.innerWidth;
+    var height = rect ? rect.height : window.innerHeight;
+
+    if (!width || !height) {
+      width = window.innerWidth;
+      height = window.innerHeight;
+    }
+
+    pointer.x = ((event.clientX - left) / width) * 2 - 1;
+    pointer.y = -((event.clientY - top) / height) * 2 + 1;
+  }
+
+  function resolveArchitectRootFromNode(node) {
+    if (!node) return null;
+
+    // Risali fino a trovare un root marcato, oppure un nodo direttamente sotto la scena
+    var cur = node;
+    var lastSelectable = null;
+    while (cur) {
+      if (cur.userData && (cur.userData.sourceFile || cur.userData._architectSelectable)) {
+        lastSelectable = cur;
+      }
+      if (cur.userData && cur.userData._architectRoot) {
+        return cur;
+      }
+      if (ctx && ctx.scene && cur.parent === ctx.scene) {
+        // se è child diretto della scena e ha sourceFile, trattalo come root
+        if (cur.userData && (cur.userData.sourceFile || cur.userData._architectSelectable)) {
+          return cur;
+        }
+      }
+      cur = cur.parent;
+    }
+    return lastSelectable;
+  }
+
+  function findSelectableFromIntersection(obj) {
+    var cur = obj;
+    while (cur) {
+      if (cur.userData && cur.userData.axis) {
+        return { kind: "axis", axis: cur.userData.axis };
+      }
+      if (cur.userData && (cur.userData.sourceFile || cur.userData._architectSelectable)) {
+        var root = resolveArchitectRootFromNode(cur);
+        return { kind: "mesh", mesh: root || cur };
+      }
+      cur = cur.parent;
+    }
+    return null;
+  }
+
+  function isPickDebugEnabled() {
+    try {
+      return localStorage.getItem("architectDebugPick") === "1";
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function debugLogPick(intersects) {
+    if (!isPickDebugEnabled()) return;
+    try {
+      var top = (intersects || []).slice(0, 8).map(function (hit) {
+        var o = hit && hit.object;
+        var name = o && (o.name || o.type) ? (o.name || o.type) : "(no-name)";
+        var sf = o && o.userData && o.userData.sourceFile ? o.userData.sourceFile : null;
+        var ax = o && o.userData && o.userData.axis ? o.userData.axis : null;
+        var root = o ? resolveArchitectRootFromNode(o) : null;
+        var rootName = root && (root.name || root.type) ? (root.name || root.type) : null;
+        var rootSf = root && root.userData && root.userData.sourceFile ? root.userData.sourceFile : null;
+        return {
+          name: name,
+          type: o ? o.type : null,
+          sourceFile: sf,
+          axis: ax,
+          root: rootName,
+          rootSourceFile: rootSf,
+          dist: hit ? Math.round(hit.distance * 100) / 100 : null,
+        };
+      });
+      console.log("[ArchitectPick] hits=", intersects ? intersects.length : 0, top);
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  function collectArchitectRoots() {
+    var roots = [];
+    var seen = new Set();
+    if (!ctx || !ctx.scene) return roots;
+    ctx.scene.traverse(function (obj) {
+      if (!obj || !obj.userData) return;
+      var isRoot = !!obj.userData._architectRoot;
+      // compatibilità: root anche se è child diretto scena con sourceFile
+      if (!isRoot && obj.parent === ctx.scene && obj.userData.sourceFile) {
+        isRoot = true;
+      }
+      if (!isRoot) return;
+      if (seen.has(obj)) return;
+      seen.add(obj);
+      roots.push(obj);
+    });
+    return roots;
+  }
+
+  function pickByBoundingBoxes(ray) {
+    // Fallback robusto: usa AABB dei root dei modelli
+    // Utile quando il raycast geometrico non colpisce sub-mesh (modelli piccoli, collider strani, ecc.)
+    if (!ray) return null;
+    var roots = collectArchitectRoots();
+    if (!roots.length) return null;
+
+    var best = null;
+    var bestDist = Infinity;
+    var tmpBox = new THREE.Box3();
+    var hitPoint = new THREE.Vector3();
+
+    for (var i = 0; i < roots.length; i++) {
+      var root = roots[i];
+      try {
+        tmpBox.setFromObject(root);
+        if (!tmpBox.isEmpty() && ray.intersectBox(tmpBox, hitPoint)) {
+          var d = ray.origin.distanceTo(hitPoint);
+          if (d < bestDist) {
+            bestDist = d;
+            best = root;
+          }
+        }
+      } catch (e) {
+        // ignore single object
+      }
+    }
+
+    return best;
+  }
+
+  function buildRaycastTargets() {
+    var list = [];
+    var seen = new Set();
+
+    placedMeshes.forEach(function (m) {
+      if (m && !seen.has(m)) {
+        seen.add(m);
+        list.push(m);
+      }
+    });
+
+    if (ctx && ctx.scene) {
+      ctx.scene.traverse(function (obj) {
+        if (!obj || !obj.userData || !obj.userData.sourceFile) return;
+        // preferisci il root del modello (tipicamente gltf.scene) ma va bene anche il node con sourceFile
+        if (!seen.has(obj)) {
+          seen.add(obj);
+          list.push(obj);
+        }
+      });
+    }
+
+    // Gizmo arrows (se presenti)
+    gizmoArrows.forEach(function (a) {
+      if (a && !seen.has(a)) {
+        seen.add(a);
+        list.push(a);
+      }
+    });
+
+    return list;
+  }
 
   function init(opts) {
     if (!opts || !opts.state || !opts.scene || !opts.camera) {
       console.warn("⚠️ architect-mode: init richiede state, scene, camera");
       return;
     }
+    if (!THREE || !THREE.Raycaster || !THREE.Vector2) {
+      console.error("❌ architect-mode: THREE non disponibile");
+      return;
+    }
+    raycaster = raycaster || new THREE.Raycaster();
+    pointer = pointer || new THREE.Vector2();
     ctx = {
       state: opts.state,
       scene: opts.scene,
@@ -68,22 +298,38 @@ window.RSG.ui = window.RSG.ui || {};
   }
 
   function buildUI() {
+    // Container principale
     panel = document.createElement("div");
     panel.id = "architect-panel";
     panel.style.display = "none";
 
-    var title = document.createElement("div");
-    title.className = "architect-title";
-    title.textContent = "ARCHITECT MODE";
-    panel.appendChild(title);
+    // Layout con file browser a sinistra e controls a destra
+    var layout = document.createElement("div");
+    layout.className = "architect-layout";
+    
+    // Pannello sinistro: File Browser
+    var leftPanel = document.createElement("div");
+    leftPanel.className = "architect-left-panel";
+    leftPanel.innerHTML = '<div class="architect-browser-title">OGGETTI</div>';
+    browserContent = document.createElement("div");
+    browserContent.className = "architect-browser-content";
+    buildFileBrowser(browserContent);
+    leftPanel.appendChild(browserContent);
+    layout.appendChild(leftPanel);
 
+    // Pannello destro: Controls
+    var rightPanel = document.createElement("div");
+    rightPanel.className = "architect-right-panel";
+    
+    // Asset select nascosto (usato internamente)
     assetSelect = document.createElement("select");
     assetSelect.className = "architect-select";
+    assetSelect.style.display = "none";
     populateAssetList();
     assetSelect.addEventListener("change", function () {
       syncInputsToPresetForAsset(assetSelect.value);
     });
-    panel.appendChild(assetSelect);
+    rightPanel.appendChild(assetSelect);
 
     var buttons = document.createElement("div");
     buttons.className = "architect-buttons";
@@ -100,7 +346,7 @@ window.RSG.ui = window.RSG.ui || {};
     deleteBtn.onclick = deleteSelected;
     buttons.appendChild(deleteBtn);
 
-    panel.appendChild(buttons);
+    rightPanel.appendChild(buttons);
 
     // Collision toggle
     var collidableRow = document.createElement("label");
@@ -112,7 +358,7 @@ window.RSG.ui = window.RSG.ui || {};
     collidableText.textContent = "Collisione";
     collidableRow.appendChild(collidableCheckbox);
     collidableRow.appendChild(collidableText);
-    panel.appendChild(collidableRow);
+    rightPanel.appendChild(collidableRow);
 
     // Scale control (single slider)
     var scaleRow = document.createElement("div");
@@ -120,9 +366,9 @@ window.RSG.ui = window.RSG.ui || {};
     scaleRow.style.width = "200%"; // doppia larghezza per maggior precisione
     scaleSlider = document.createElement("input");
     scaleSlider.type = "range";
-    scaleSlider.min = "0.01";
+    scaleSlider.min = "0.001";
     scaleSlider.max = "16";
-    scaleSlider.step = "0.001";
+    scaleSlider.step = "0.0001";
     scaleSlider.value = "1";
     scaleSlider.className = "architect-scale-slider";
     scaleSlider.style.width = "100%";
@@ -131,14 +377,14 @@ window.RSG.ui = window.RSG.ui || {};
     scaleValueLabel.textContent = "1.000x";
     scaleRow.appendChild(scaleSlider);
     scaleRow.appendChild(scaleValueLabel);
-    panel.appendChild(scaleRow);
+    rightPanel.appendChild(scaleRow);
 
     scaleSlider.addEventListener("input", applyScaleFromInputs);
 
     var scaleButtons = document.createElement("div");
     scaleButtons.className = "architect-buttons";
 
-    [0.01, 0.025, 0.05, 0.25, 0.5, 1.0, 2.0].forEach(function (preset) {
+    [0.001, 0.01, 0.025, 0.05, 0.25, 0.5, 1.0, 2.0].forEach(function (preset) {
       var b = document.createElement("button");
       b.className = "architect-btn small";
       b.textContent = "x" + preset;
@@ -148,25 +394,25 @@ window.RSG.ui = window.RSG.ui || {};
       };
       scaleButtons.appendChild(b);
     });
-    panel.appendChild(scaleButtons);
+    rightPanel.appendChild(scaleButtons);
 
-    // Position controls
-    var posRow = document.createElement("div");
-    posRow.className = "architect-scale-row";
-    posXInput = document.createElement("input");
-    posYInput = document.createElement("input");
-    posZInput = document.createElement("input");
-    [posXInput, posYInput, posZInput].forEach(function (inp) {
-      inp.type = "number";
-      inp.step = "0.1";
-      inp.className = "architect-scale-input";
-      posRow.appendChild(inp);
-    });
-    panel.appendChild(posRow);
+    var heightButtons = document.createElement("div");
+    heightButtons.className = "architect-buttons";
+    var zeroHeightBtn = document.createElement("button");
+    zeroHeightBtn.className = "architect-btn";
+    zeroHeightBtn.textContent = "Porta altezza a 0";
+    zeroHeightBtn.onclick = function () {
+      if (selectedMesh) {
+        selectedMesh.position.y = 0;
+        setPositionInputs(selectedMesh);
+        syncCollision(selectedMesh);
+        updateHelpers();
+      }
+    };
+    heightButtons.appendChild(zeroHeightBtn);
+    rightPanel.appendChild(heightButtons);
 
-    [posXInput, posYInput, posZInput].forEach(function (inp) {
-      inp.addEventListener("input", applyPositionFromInputs);
-    });
+    // Posizioni manuali rimosse (si usano drag/gizmo)
 
     // Rotation control (yaw slider)
     var rotRow = document.createElement("div");
@@ -183,7 +429,7 @@ window.RSG.ui = window.RSG.ui || {};
     rotValueLabel.textContent = "0°";
     rotRow.appendChild(rotSlider);
     rotRow.appendChild(rotValueLabel);
-    panel.appendChild(rotRow);
+    rightPanel.appendChild(rotRow);
 
     rotSlider.addEventListener("input", applyRotationFromInputs);
 
@@ -202,9 +448,15 @@ window.RSG.ui = window.RSG.ui || {};
     rotXValueLabel.textContent = "0°";
     rotXRow.appendChild(rotXSlider);
     rotXRow.appendChild(rotXValueLabel);
-    panel.appendChild(rotXRow);
+    rightPanel.appendChild(rotXRow);
 
     rotXSlider.addEventListener("input", applyRotationFromInputs);
+
+    [posXInput, posYInput, posZInput, rotSlider, rotXSlider, scaleSlider].forEach(function (inp) {
+      if (!inp) return;
+      inp.addEventListener("focus", function () { setTypingArchitect(true); });
+      inp.addEventListener("blur", function () { setTypingArchitect(false); });
+    });
 
     // Persistence buttons
     var persistenceRow = document.createElement("div");
@@ -221,17 +473,20 @@ window.RSG.ui = window.RSG.ui || {};
     presetBtn.onclick = savePresetForSelected;
     persistenceRow.appendChild(presetBtn);
 
-    panel.appendChild(persistenceRow);
+    rightPanel.appendChild(persistenceRow);
 
     statusLabel = document.createElement("div");
     statusLabel.className = "architect-status";
-    statusLabel.textContent = "SHIFT=mouse libero · E piazza · Q elimina · doppio SPAZIO=volo";
-    panel.appendChild(statusLabel);
+    statusLabel.textContent = "SHIFT+Click=seleziona · E=piazza · Q=elimina · Frecce=sposta";
+    rightPanel.appendChild(statusLabel);
 
     selectedLabel = document.createElement("div");
     selectedLabel.className = "architect-status secondary";
     selectedLabel.textContent = "Nessun elemento";
-    panel.appendChild(selectedLabel);
+    rightPanel.appendChild(selectedLabel);
+
+    layout.appendChild(rightPanel);
+    panel.appendChild(layout);
 
     document.body.appendChild(panel);
 
@@ -239,9 +494,143 @@ window.RSG.ui = window.RSG.ui || {};
     document.addEventListener("mousedown", onMouseDown, false);
     document.addEventListener("mousemove", onMouseMove, false);
     document.addEventListener("mouseup", onMouseUp, false);
-    document.addEventListener("dblclick", onDoubleClick, false);
+    // Previene menu contestuale per permettere look con tasto destro
+    document.addEventListener("contextmenu", function(e) {
+      if (isActive) e.preventDefault();
+    }, false);
+
+    console.log("✅ Architect event listeners registrati", {
+      keydown: !!onKeyDown,
+      mousedown: !!onMouseDown,
+      mousemove: !!onMouseMove,
+      mouseup: !!onMouseUp
+    });
 
     syncInputsToPresetForAsset(assetSelect.value);
+  }
+
+  function buildFileBrowser(container) {
+    // Rimosso il doppio click: modalità mouse si gestisce con SHIFT
+    var target = container || browserContent;
+    if (!target) return;
+    while (target.firstChild) target.removeChild(target.firstChild);
+
+    var list = ctx.getAssetList() || [];
+    var categories = {
+      "🏗️ Edifici e Strutture": [],
+      "🌳 Natura": [],
+      "🛣️ Strade e Terreno": [],
+      "🪑 Arredamenti": [],
+      "🔫 Armi": [],
+      "👕 Vestiti": [],
+      "🚗 Veicoli": [],
+      "💻 Elettronica": [],
+      "🎭 Oggetti Scena": [],
+      "📦 Altro": []
+    };
+
+    var seen = {};
+    list.forEach(function (item) {
+      if (!item || !item.file || seen[item.file]) return;
+      seen[item.file] = true;
+
+      var cat = item.category || "altro";
+      var fileName = item.file.toLowerCase();
+      
+      // Usa model-names.js se disponibile per nome user-friendly
+      var displayName = item.file.replace(".glb", "").replace(/_/g, " ");
+      if (window.RSG && window.RSG.data && window.RSG.data.modelNames) {
+        displayName = window.RSG.data.modelNames.getDisplayName(item.file);
+      }
+
+      // Edifici e Strutture (case, muri, porte, finestre, ponti)
+      if (cat.match(/building|edifici|structure|house|wall|door|window|gate|fence|bridge|barn/i) ||
+          fileName.match(/house|building|wall|door|window|gate|fence|bridge|barn|shed/)) {
+        categories["🏗️ Edifici e Strutture"].push({ file: item.file, name: displayName });
+      }
+      // Natura (alberi, piante, rocce, acqua)
+      else if (cat.match(/nature|natura|tree|plant|rock|stone|water|flower|bush|grass_patch/i) ||
+               fileName.match(/tree|plant|rock|stone|water|flower|bush|leaf|branch/)) {
+        categories["🌳 Natura"].push({ file: item.file, name: displayName });
+      }
+      // Strade e Terreno (strade, marciapiedi, erba, sabbia, path)
+      else if (cat.match(/road|street|path|terrain|ground|grass|dirt|sand|pavement|sidewalk/i) ||
+               fileName.match(/road|street|path|grass|dirt|sand|pavement|sidewalk|asphalt|concrete_slab/)) {
+        categories["🛣️ Strade e Terreno"].push({ file: item.file, name: displayName });
+      }
+      // Arredamenti
+      else if (cat.match(/furniture|arredament|sofa|table|chair|bed|cabinet|desk|shelf/i) ||
+               fileName.match(/sofa|couch|table|chair|bed|cabinet|desk|shelf|drawer/)) {
+        categories["🪑 Arredamenti"].push({ file: item.file, name: displayName });
+      }
+      // Armi
+      else if (cat.match(/weapon|armi|pistol|rifle|gun|sword|knife|blade/i) ||
+               fileName.match(/pistol|rifle|gun|sword|knife|blade|weapon/)) {
+        categories["🔫 Armi"].push({ file: item.file, name: displayName });
+      }
+      // Vestiti
+      else if (cat.match(/cloth|vestit|shirt|pants|jacket|dress|hat|helmet|boot/i) ||
+               fileName.match(/shirt|pants|jacket|dress|hat|helmet|boot|shoe|glove/)) {
+        categories["👕 Vestiti"].push({ file: item.file, name: displayName });
+      }
+      // Veicoli
+      else if (cat.match(/vehicle|veicol|car|bike|motorcycle|truck|boat/i) ||
+               fileName.match(/car|bike|motorcycle|truck|boat|vehicle/)) {
+        categories["🚗 Veicoli"].push({ file: item.file, name: displayName });
+      }
+      // Elettronica
+      else if (cat.match(/electronic|tv|computer|pc|phone|radio|monitor|screen/i) ||
+               fileName.match(/tv|computer|pc|phone|radio|monitor|screen|laptop/)) {
+        categories["💻 Elettronica"].push({ file: item.file, name: displayName });
+      }
+      // Oggetti Scena (decorazioni, props generici)
+      else if (cat.match(/decoration|decor|scene|prop|object/i) ||
+               fileName.match(/prop|decoration|ornament/)) {
+        categories["🎭 Oggetti Scena"].push({ file: item.file, name: displayName });
+      }
+      // Altro (fallback)
+      else {
+        categories["📦 Altro"].push({ file: item.file, name: displayName });
+      }
+    });
+
+    Object.keys(categories).forEach(function (catName) {
+      var items = categories[catName];
+      if (!items.length) return;
+
+      var folderDiv = document.createElement("div");
+      folderDiv.className = "architect-folder";
+
+      var headerDiv = document.createElement("div");
+      headerDiv.className = "architect-folder-header";
+      headerDiv.textContent = catName + " (" + items.length + ")";
+      headerDiv.onclick = function () {
+        folderDiv.classList.toggle("collapsed");
+      };
+
+      var contentDiv = document.createElement("div");
+      contentDiv.className = "architect-folder-content";
+
+      items.forEach(function (item) {
+        var itemDiv = document.createElement("div");
+        itemDiv.className = "architect-file-item";
+        itemDiv.textContent = "📄 " + item.name;
+        itemDiv.onclick = function () {
+          if (assetSelect) {
+            assetSelect.value = item.file;
+            syncInputsToPresetForAsset(item.file);
+          }
+          var selected = browserContent.querySelector(".architect-file-item.selected");
+          if (selected) selected.classList.remove("selected");
+          itemDiv.classList.add("selected");
+        };
+        contentDiv.appendChild(itemDiv);
+      });
+
+      folderDiv.appendChild(headerDiv);
+      folderDiv.appendChild(contentDiv);
+      target.appendChild(folderDiv);
+    });
   }
 
   function populateAssetList() {
@@ -273,10 +662,50 @@ window.RSG.ui = window.RSG.ui || {};
 
   function setActive(flag) {
     isActive = !!flag;
-    if (panel) panel.style.display = isActive ? "flex" : "none";
+    if (panel) {
+      panel.style.display = isActive ? "flex" : "none";
+      panel.style.pointerEvents = isActive ? "auto" : "none";
+    }
+    console.log("🟣 Architect setActive", { active: isActive });
     if (isActive) {
       ensureMapLoaded(false);
       showShortcuts(true);
+      buildFileBrowser();
+
+      // Assicura che tutti gli oggetti già presenti con sourceFile siano selezionabili
+      try {
+        if (ctx && ctx.scene) {
+          ctx.scene.traverse(function (obj) {
+            if (!obj || !obj.userData || !obj.userData.sourceFile) return;
+            // Marca come root solo il nodo più alto che ha sourceFile (tipicamente gltf.scene)
+            if (obj.parent === ctx.scene) {
+              markSelectableTree(obj, obj.userData.sourceFile);
+            }
+          });
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // Ricostruisci lista oggetti piazzati dal contenuto scena (utile dopo reload/hotreload)
+      try {
+        if (ctx && ctx.scene) {
+          var rebuilt = [];
+          ctx.scene.traverse(function (obj) {
+            if (obj && obj.userData && (obj.userData.sourceFile || obj.userData._architectSelectable)) {
+              // Preferisci i root: quelli direttamente figli della scena
+              if (obj.parent === ctx.scene) {
+                rebuilt.push(obj);
+              }
+            }
+          });
+          if (rebuilt.length) {
+            placedMeshes = rebuilt;
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
     } else {
       showShortcuts(false);
     }
@@ -285,6 +714,10 @@ window.RSG.ui = window.RSG.ui || {};
       ctx.state.mode = isActive ? "architect" : "gameplay";
     }
     if (!isActive) {
+      setTypingArchitect(false);
+      if (document && document.body) {
+        document.body.classList.remove("architect-no-select");
+      }
       clearSelection();
       if (collidableCheckbox) collidableCheckbox.checked = false;
       if (ctx && ctx.state) {
@@ -325,6 +758,7 @@ window.RSG.ui = window.RSG.ui || {};
         mesh.scale.setScalar(1.0);
         mesh.userData = mesh.userData || {};
         mesh.userData.sourceFile = file;
+        markSelectableTree(mesh, file);
         applyDefaultsIfAny(mesh, file);
         dropMeshToSurface(mesh, targetPos, useOffset, hasPreset);
         ctx.scene.add(mesh);
@@ -462,6 +896,7 @@ window.RSG.ui = window.RSG.ui || {};
 
   function onKeyDown(event) {
     if (!isActive) return;
+    if (document.activeElement && document.activeElement.tagName === "INPUT") return;
     switch (event.code) {
       case "ArrowUp":
         nudgeSelected(0, 0, -SNAP_POS);
@@ -490,45 +925,131 @@ window.RSG.ui = window.RSG.ui || {};
   }
 
   function onMouseDown(event) {
+    console.log("[Architect] onMouseDown evento ricevuto", {
+      isActive: isActive,
+      target: event.target ? event.target.tagName : null,
+      targetId: event.target ? event.target.id : null,
+      targetClass: event.target ? event.target.className : null,
+      clientX: event.clientX,
+      clientY: event.clientY
+    });
+
+    if (!isActive) {
+      console.log("[Architect] onMouseDown - NON attivo, ignoro");
+      return;
+    }
+    if (!ctx || !ctx.camera || !ctx.scene) {
+      console.log("[Architect] onMouseDown - ctx/camera/scene mancanti");
+      return;
+    }
+
+    // Blocca solo i click SU controlli interattivi (button, input, select, ecc.), 
+    // NON su DIV generici del layout che coprono il canvas.
+    var targetTag = event.target ? event.target.tagName.toLowerCase() : '';
+    var isInteractiveControl = ['button', 'input', 'select', 'textarea', 'a'].indexOf(targetTag) !== -1;
+    if (isInteractiveControl) {
+      console.log("[Architect] onMouseDown - click su controllo interattivo, ignoro");
+      return;
+    }
+
+    // In Architect: selezione SOLO in mouse mode (SHIFT premuto)
+    var mouseMode = !!(ctx && ctx.state && ctx.state.ui && ctx.state.ui.isMouseMode);
+    console.log("[Architect] onMouseDown - isMouseMode:", mouseMode);
+    
+    if (!mouseMode) {
+      console.log("[Architect] onMouseDown - NON in mouse mode (tieni premuto SHIFT)");
+      setStatus("⚠️ Tieni premuto SHIFT per selezionare");
+      return;
+    }
+
+    // Se pointer lock attivo, esci una volta sola (sincronamente)
+    if (document.pointerLockElement) {
+      try {
+        document.exitPointerLock();
+      } catch (e) {}
+      setStatus("Mouse sbloccato - clicca di nuovo per selezionare");
+      return;
+    }
+
+    console.log("[Architect] onMouseDown - mouse mode attivo, picking...");
+    tryPickAt(event.clientX, event.clientY, event.button);
+  }
+
+  function tryPickAt(clientX, clientY, button) {
     if (!isActive) return;
     if (!ctx || !ctx.camera || !ctx.scene) return;
-    if (panel && event.target && panel.contains(event.target)) return;
+    if (!raycaster || !pointer) return;
 
-    // normalize pointer to NDC
-    pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
-    pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    console.log("[Architect] tryPickAt", { clientX: clientX, clientY: clientY, button: button });
+
+    // Aggiorna pointer in NDC
+    updatePointerFromEvent({ clientX: clientX, clientY: clientY });
+    console.log("[Architect] pointer NDC:", pointer.x, pointer.y);
+
+    // Assicura matrici aggiornate
+    try {
+      if (ctx.camera) ctx.camera.updateMatrixWorld(true);
+      if (ctx.scene) ctx.scene.updateMatrixWorld(true);
+    } catch (e) {}
 
     raycaster.setFromCamera(pointer, ctx.camera);
-    var targets = placedMeshes.slice();
-    // Include other scene meshes/groups so we can edit pre-existing objects and gizmo arrows
-    ctx.scene.children.forEach(function (child) {
-      if (child.isMesh || child.type === "Group" || child.type === "ArrowHelper") {
-        targets.push(child);
-      }
-    });
-    var intersects = targets.length ? raycaster.intersectObjects(targets, true) : [];
-    if (intersects && intersects.length) {
-      // find top-level placed mesh
-      var obj = intersects[0].object;
-      while (obj && placedMeshes.indexOf(obj) === -1 && targets.indexOf(obj) === -1 && obj.parent) {
-        obj = obj.parent;
-      }
-      if (obj && obj.userData && obj.userData.axis && selectedMesh) {
-        startAxisDrag(obj.userData.axis);
-        return;
+
+    // Raycast su tutta la scena
+    var intersects = ctx.scene && ctx.scene.children ? raycaster.intersectObjects(ctx.scene.children, true) : [];
+    console.log("[Architect] raycast hits:", intersects.length);
+
+    if (intersects && intersects.length > 0) {
+      // Stampa i primi 5 hit per debug
+      for (var d = 0; d < Math.min(5, intersects.length); d++) {
+        var h = intersects[d];
+        var o = h.object;
+        console.log("  Hit", d, ":", {
+          name: o.name || "(no-name)",
+          type: o.type,
+          sourceFile: o.userData && o.userData.sourceFile,
+          _architectSelectable: o.userData && o.userData._architectSelectable,
+          _architectRoot: o.userData && o.userData._architectRoot,
+          dist: Math.round(h.distance * 100) / 100
+        });
       }
 
-      if (obj && (placedMeshes.indexOf(obj) !== -1 || targets.indexOf(obj) !== -1)) {
-        setSelected(obj);
-        if (placedMeshes.indexOf(obj) === -1) {
-          placedMeshes.push(obj);
+      // Cerca il primo oggetto selezionabile
+      for (var i = 0; i < intersects.length; i++) {
+        var hit = intersects[i];
+        var obj = hit.object;
+
+        // Controlla se è un gizmo axis
+        if (obj.userData && obj.userData.axis && selectedMesh) {
+          console.log("[Architect] Selezionato gizmo axis:", obj.userData.axis);
+          startAxisDrag(obj.userData.axis);
+          return;
         }
-        setStatus("Selezionato: " + (obj.userData && obj.userData.sourceFile ? obj.userData.sourceFile : "mesh"));
-        if (event.button === 0 && !document.pointerLockElement) {
-          startDragFromPointer();
+
+        // Risali la gerarchia cercando un root selezionabile
+        var root = resolveArchitectRootFromNode(obj);
+        if (root) {
+          console.log("[Architect] Root trovato:", {
+            name: root.name || "(no-name)",
+            sourceFile: root.userData && root.userData.sourceFile
+          });
+          setSelected(root);
+          if (placedMeshes.indexOf(root) === -1) {
+            placedMeshes.push(root);
+          }
+          var fileName = root.userData && root.userData.sourceFile ? root.userData.sourceFile : "oggetto";
+          setStatus("✓ Selezionato: " + fileName);
+          if (button === 0) {
+            startDragFromPointer();
+          }
+          return;
         }
       }
     }
+
+    // Nessun oggetto selezionabile
+    console.log("[Architect] Nessun oggetto selezionabile trovato");
+    clearSelection();
+    setStatus("✗ Nessun oggetto selezionabile (premi E per piazzare)");
   }
 
   function startDragFromPointer() {
@@ -568,10 +1089,19 @@ window.RSG.ui = window.RSG.ui || {};
   function onMouseMove(event) {
     if (!isActive || !selectedMesh) return;
     if (document.pointerLockElement) return; // need free mouse to drag
+    
+    // Se esci da mouse mode (SHIFT rilasciato), interrompi drag.
+    var mouseMode = !!(ctx && ctx.state && ctx.state.ui && ctx.state.ui.isMouseMode);
+    if (!mouseMode) {
+      if (axisDrag || isDragging) {
+        onMouseUp();
+      }
+      isShiftSelecting = false;
+      return;
+    }
 
     if (axisDrag) {
-      pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
-      pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      updatePointerFromEvent(event);
       raycaster.setFromCamera(pointer, ctx.camera);
 
       var hitPointAxis = new THREE.Vector3();
@@ -589,8 +1119,7 @@ window.RSG.ui = window.RSG.ui || {};
 
     if (!isDragging) return;
 
-    pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
-    pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    updatePointerFromEvent(event);
     raycaster.setFromCamera(pointer, ctx.camera);
 
     var hitPoint = new THREE.Vector3();
@@ -609,21 +1138,10 @@ window.RSG.ui = window.RSG.ui || {};
     dragPlane = null;
     dragOffset = null;
     axisDrag = null;
+    isShiftSelecting = false;
   }
 
-  function onDoubleClick(event) {
-    if (!isActive) return;
-    var now = performance.now();
-    if (now - lastDoubleClick < DOUBLE_CLICK_PAUSE_MS) return;
-    lastDoubleClick = now;
-    // Stop movement and free mouse
-    if (document.pointerLockElement) document.exitPointerLock();
-    if (ctx && ctx.state && ctx.state.input) {
-      ctx.state.input.moveForward = ctx.state.input.moveBackward = false;
-      ctx.state.input.moveLeft = ctx.state.input.moveRight = false;
-    }
-    setStatus("Mouse libero (dblclick)");
-  }
+  // Doppio click disabilitato: il mouse libero si gestisce tenendo premuto SHIFT
 
   function clearSelection() {
     selectedMesh = null;
@@ -789,6 +1307,12 @@ window.RSG.ui = window.RSG.ui || {};
     gizmoArrows[0].userData.axis = "x";
     gizmoArrows[1].userData.axis = "y";
     gizmoArrows[2].userData.axis = "z";
+    // Rendi raycastabile anche sui componenti interni dell'ArrowHelper (cone/line)
+    gizmoArrows.forEach(function (a) {
+      if (!a || !a.userData || !a.userData.axis) return;
+      if (a.cone) a.cone.userData.axis = a.userData.axis;
+      if (a.line) a.line.userData.axis = a.userData.axis;
+    });
     gizmoArrows.forEach(function (a) { ctx.scene.add(a); });
   }
 
@@ -947,7 +1471,7 @@ window.RSG.ui = window.RSG.ui || {};
 
   function saveMap() {
     var meshes = collectPlaceableMeshes();
-    var data = meshes.map(function (m) {
+    var objects = meshes.map(function (m) {
       return {
         file: m.userData && m.userData.sourceFile ? m.userData.sourceFile : "",
         position: { x: m.position.x, y: m.position.y, z: m.position.z },
@@ -956,16 +1480,47 @@ window.RSG.ui = window.RSG.ui || {};
         collidable: !!(m.userData && m.userData.collidable),
       };
     });
-    var json = JSON.stringify(data, null, 2);
+    
+    // Usa worldManager se disponibile
+    if (window.RSG && window.RSG.systems && window.RSG.systems.worldManager) {
+      var worldManager = window.RSG.systems.worldManager;
+      var currentWorldId = worldManager.getCurrentWorld();
+      
+      // Se non c'è un mondo attivo, creane uno di default
+      if (!currentWorldId) {
+        console.log("⚠️ Architect: Nessun mondo attivo, ne creo uno nuovo.");
+        currentWorldId = worldManager.createWorld("Nuovo Mondo", "empty");
+        if (currentWorldId) {
+          worldManager.setCurrentWorld(currentWorldId);
+        }
+      }
+      
+      if (currentWorldId) {
+        var worldData = worldManager.loadWorld(currentWorldId);
+        if (!worldData) {
+          // Fallback se load fallisce (non dovrebbe succedere se appena creato)
+          worldData = { objects: [] };
+        }
+        worldData.objects = objects;
+        if (worldManager.saveWorld(currentWorldId, worldData)) {
+          setStatus("Mondo salvato (" + objects.length + " elementi)");
+          console.log("✅ Architect: Mondo salvato", currentWorldId);
+          return;
+        }
+      }
+    }
+    
+    // Fallback vecchio sistema
+    var json = JSON.stringify(objects, null, 2);
     try {
       localStorage.setItem("architectMap", json);
       localStorage.setItem("architectMapMeta", JSON.stringify(mapMeta || {}));
-      setStatus("Mappa salvata (" + data.length + " elementi)");
+      setStatus("Mappa salvata (" + objects.length + " elementi)");
+      console.log("⚠️ Architect: Usando vecchio sistema localStorage");
     } catch (e) {
       console.warn("Architect save error", e);
       setStatus("Errore salvataggio");
     }
-    console.log("Architect map JSON:\n", json);
   }
 
   function collectPlaceableMeshes() {
@@ -990,13 +1545,45 @@ window.RSG.ui = window.RSG.ui || {};
   }
 
   function loadMap(quiet) {
-    var json = localStorage.getItem("architectMap");
-    if (!json) {
-      if (!quiet) setStatus("Nessun salvataggio");
+    var arr = null;
+    
+    // Prova a caricare da worldManager
+    if (window.RSG && window.RSG.systems && window.RSG.systems.worldManager) {
+      var worldManager = window.RSG.systems.worldManager;
+      var currentWorldId = worldManager.getCurrentWorld();
+      
+      if (currentWorldId) {
+        var worldData = worldManager.loadWorld(currentWorldId);
+        if (worldData && worldData.objects) {
+          arr = worldData.objects;
+          console.log("✅ Architect: Caricato mondo", currentWorldId, "con", arr.length, "oggetti");
+        }
+      }
+    }
+    
+    // Fallback vecchio sistema
+    if (!arr) {
+      var json = localStorage.getItem("architectMap");
+      if (!json) {
+        if (!quiet) setStatus("Nessun salvataggio");
+        return;
+      }
+      try {
+        arr = JSON.parse(json);
+        console.log("⚠️ Architect: Usando vecchio sistema localStorage");
+      } catch (e) {
+        console.warn("Architect load error", e);
+        if (!quiet) setStatus("Errore caricamento");
+        return;
+      }
+    }
+    
+    if (!arr || !arr.length) {
+      if (!quiet) setStatus("Nessun oggetto da caricare");
       return;
     }
+    
     try {
-      var arr = JSON.parse(json);
       resetMap();
       arr.forEach(function (entry) {
         if (!entry || !entry.file) return;
@@ -1010,6 +1597,7 @@ window.RSG.ui = window.RSG.ui || {};
             mesh.userData = mesh.userData || {};
             mesh.userData.sourceFile = entry.file;
             mesh.userData.collidable = !!entry.collidable;
+            markSelectableTree(mesh, entry.file);
             ctx.scene.add(mesh);
             placedMeshes.push(mesh);
             syncCollision(mesh);
@@ -1063,28 +1651,9 @@ window.RSG.ui = window.RSG.ui || {};
   function showShortcuts(flag) {
     var el = document.getElementById("shortcut-hud");
     if (!el) return;
-    if (flag) {
-      el.innerHTML = '<div class="shortcut-title">SCORCIATOIE</div><ul>' +
-        '<li>F2: entra/uscita Architect Mode</li>' +
-        '<li>E: piazza</li>' +
-        '<li>Q: elimina</li>' +
-        '<li>SHIFT: libera mouse</li>' +
-        '<li>Frecce: muovi in griglia</li>' +
-        '<li>Slider: scala / rotazione</li>' +
-        '<li>Salva: persiste la mappa</li>' +
-      '</ul>';
-    } else {
-      el.innerHTML = '<div class="shortcut-title">SCORCIATOIE</div><ul>' +
-        '<li>WASD: muovi</li>' +
-        '<li>SPAZIO: salta</li>' +
-        '<li>Mouse1/Q: spara</li>' +
-        '<li>E: interagisci / raccogli</li>' +
-        '<li>R: ricarica</li>' +
-        '<li>TAB: inventario</li>' +
-        '<li>F2: entra in Architect Mode</li>' +
-      '</ul>';
-    }
-    el.style.display = "block";
+    // Tab scorciatoie disattivato
+    el.innerHTML = "";
+    el.style.display = "none";
   }
 
   window.RSG.ui.architect = {

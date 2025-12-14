@@ -7,18 +7,79 @@
     <link rel="stylesheet" href="styles/main.css" />
   </head>
   <body>
+    <div id="debug-overlay" class="debug-overlay" style="display:none">debug...</div>
     <div id="hub-menu" class="menu-container">
       <div class="menu-content">
         <div class="menu-buttons">
+          <button class="menu-btn" id="worlds-btn">GESTISCI MONDI</button>
           <button class="menu-btn" id="start-game-btn">AVVIA GIOCO</button>
           <button class="menu-btn" id="select-game-btn">SELEZIONA GIOCO</button>
         </div>
       </div>
     </div>
 
+    <!-- World Management Menu -->
+    <div id="worlds-menu" class="menu-container" style="display: none">
+      <div class="menu-content">
+        <h2 class="menu-title">GESTIONE MONDI</h2>
+        
+        <div class="worlds-actions">
+          <button class="menu-btn small" id="create-world-btn">+ NUOVO MONDO</button>
+          <button class="menu-btn small" id="import-world-btn">📁 IMPORTA</button>
+        </div>
+
+        <div id="worlds-list" class="worlds-grid">
+          <!-- Worlds will be populated here -->
+        </div>
+
+        <button class="menu-btn back" id="worlds-back-btn">← INDIETRO</button>
+      </div>
+    </div>
+
+    <!-- Create World Menu -->
+    <div id="create-world-menu" class="menu-container" style="display: none">
+      <div class="menu-content">
+        <h2 class="menu-title">CREA NUOVO MONDO</h2>
+        
+        <div class="create-world-form">
+          <label for="world-name-input">Nome Mondo:</label>
+          <input type="text" id="world-name-input" class="text-input" placeholder="Il Mio Mondo" maxlength="30" />
+          
+          <label for="world-map-size">Dimensione Mappa:</label>
+          <div class="slider-container">
+            <input type="range" id="world-map-size" min="100" max="1000" value="200" step="50" />
+            <span id="map-size-value" class="slider-value">200m</span>
+          </div>
+          
+          <label for="world-time-mode">Ciclo Giorno/Notte:</label>
+          <select id="world-time-mode" class="select-input">
+            <option value="always-day">Sempre Giorno</option>
+            <option value="always-night">Sempre Notte</option>
+            <option value="dawn">Alba Fissa</option>
+            <option value="dusk">Tramonto Fisso</option>
+            <option value="real-time">Ora Reale</option>
+            <option value="cycle">Ciclo Dinamico (24h = 20min)</option>
+          </select>
+          
+          <label for="world-terrain">Tipo Terreno:</label>
+          <select id="world-terrain" class="select-input">
+            <option value="grass">Erba</option>
+            <option value="sand">Sabbia</option>
+            <option value="snow">Neve</option>
+            <option value="stone">Pietra</option>
+            <option value="dirt">Terra</option>
+          </select>
+        </div>
+
+        <div class="menu-buttons-row">
+          <button class="menu-btn" id="confirm-create-world-btn">CREA MONDO</button>
+          <button class="menu-btn back" id="create-world-back-btn">ANNULLA</button>
+        </div>
+      </div>
+    </div>
+
     <div id="game-container" style="display: none">
       <div id="game-canvas"></div>
-      <div id="back-menu-btn" class="back-button">MENU</div>
       <!-- Schermo PC interattivo -->
       <div id="pc-screen" class="pc-screen" style="display: none">
         <div class="pc-shell">
@@ -258,11 +319,14 @@
     <script src="assets/libs/three.min.js"></script>
     <script src="assets/libs/GLTFLoader.js"></script>
     <script src="scripts/data/item-registry.js"></script>
+    <script src="scripts/data/model-names.js"></script>
     <script src="scripts/gameplay/weapons.js"></script>
     <script src="scripts/gameplay/inventory.js"></script>
     <script src="scripts/gameplay/equipment-manager.js"></script>
     <script src="scripts/content/models.js"></script>
     <script src="scripts/content/environments.js"></script>
+    <script src="scripts/content/world-templates.js"></script>
+    <script src="scripts/systems/world-manager.js"></script>
     <script src="scripts/ui/hud.js"></script>
     <script src="scripts/ui/notifications.js"></script>
     <script src="scripts/ui/inventory-ui.js"></script>

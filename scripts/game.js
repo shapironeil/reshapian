@@ -4,6 +4,16 @@ console.log("📦 game.js caricato!");
 window.RSG = window.RSG || {};
 window.RSG.state = window.RSG.state || {};
 
+// Overlay minimo per sapere se gli script girano anche senza console
+document.addEventListener('DOMContentLoaded', function() {
+  debugOverlay('DOM pronto');
+  // Rimuovi il box debug dallo schermo
+  var dbg = document.getElementById('debug-overlay');
+  if (dbg && dbg.parentNode) {
+    dbg.parentNode.removeChild(dbg);
+  }
+});
+
 // ==================== ADVANCED EQUIPMENT SYSTEM GLOBALS ====================
 var inventoryUI = null; // Istanza di InventoryUI
 var equipmentManager = null; // Istanza di EquipmentManager
@@ -128,6 +138,18 @@ function createInitialState() {
   };
 }
 
+// Debug overlay helper (on-screen, no console needed)
+function debugOverlay(msg, opts) {
+  var el = document.getElementById('debug-overlay');
+  if (!el) return;
+  el.style.display = 'block';
+  var lines = el.textContent ? el.textContent.split('\n') : [];
+  var prefix = opts && opts.level === 'error' ? '❌ ' : opts && opts.level === 'warn' ? '⚠️ ' : 'ℹ️ ';
+  lines.push(prefix + msg);
+  if (lines.length > 30) lines = lines.slice(lines.length - 30);
+  el.textContent = lines.join('\n');
+}
+
 function isGameplayMode() {
   // In futuro useremo solo state.mode; per ora supportiamo i flag legacy.
   if (!state) return true;
@@ -217,6 +239,7 @@ window.startGame = function () {
   }
 
   console.log("🎮 ========== AVVIO GIOCO ==========");
+  debugOverlay("AVVIO GIOCO");
   // Ricrea lo stato a ogni nuova partita (evita accumuli tra start/stop)
   state = window.RSG.state.current = createInitialState();
 
@@ -271,9 +294,46 @@ window.startGame = function () {
   state.engine.lastTime = performance.now();
   lastTime = state.engine.lastTime;
 
+  // 🌍 Carica worldData PRIMA di initThreeJS
+  console.log("🔍 Verifica worldManager prima di init...");
+  debugOverlay("Verifica worldManager...");
+  if (window.RSG && window.RSG.systems && window.RSG.systems.worldManager) {
+    var currentWorldId = window.RSG.systems.worldManager.getCurrentWorld();
+    console.log("🎮 Current World ID:", currentWorldId);
+    
+    if (currentWorldId) {
+      var worldData = window.RSG.systems.worldManager.loadWorld(currentWorldId);
+      if (worldData) {
+        state.worldData = worldData;
+        state.worldSettings = worldData.worldSettings;
+        console.log("✅ WorldData pre-caricato:", {
+          objects: worldData.objects ? worldData.objects.length : 0,
+          worldSettings: worldData.worldSettings
+        });
+        debugOverlay("WorldData caricato: obj=" + (worldData.objects ? worldData.objects.length : 0));
+      }
+    }
+  }
+
   initThreeJS();
-  initEnvironmentSystem();
-  applyEnvironmentSelection();
+  
+  // 🌍 Se abbiamo worldSettings (mondo caricato), NON usare environment system
+  // perché sovrascrive il nostro ciclo giorno/notte
+  var hasWorldSettings = state.worldSettings;
+  console.log("🌍 World settings presenti:", hasWorldSettings, state.worldSettings);
+  debugOverlay("World settings? " + (!!hasWorldSettings));
+  
+  if (!hasWorldSettings) {
+    // Legacy: usa environment system per mondi vecchi
+    initEnvironmentSystem();
+    applyEnvironmentSelection();
+  } else {
+    // Nuovo: worldSettings ha già il suo lighting/environment
+    console.log("✅ Usando worldSettings invece di environment system");
+    debugOverlay("Usando worldSettings");
+    loadModels(); // Carica modelli del mondo
+  }
+  
   animate();
 
   console.log("✅ ========== GIOCO AVVIATO ==========");
@@ -316,6 +376,7 @@ window.stopGame = function () {
 
 function initThreeJS() {
   console.log("🚀 Inizializzazione Three.js...");
+  debugOverlay("Init Three.js");
 
   if (typeof THREE === "undefined") {
     console.error("❌ THREE.js non trovato!");
@@ -328,13 +389,23 @@ function initThreeJS() {
   // Scena
   state.engine.scene = new THREE.Scene();
   scene = state.engine.scene;
+  // Background di default (sarà sovrascritto da applyDayNightCycle)
   scene.background = new THREE.Color(0x87ceeb);
-  scene.fog = new THREE.Fog(0x87ceeb, 50, 300);
 
   // Camera prima persona
   var container = document.getElementById("game-canvas");
   var width = container.clientWidth || window.innerWidth;
   var height = container.clientHeight || window.innerHeight;
+  if (!container) {
+    debugOverlay("game-canvas NON trovato", { level: 'error' });
+    console.error("❌ game-canvas non trovato nel DOM");
+    return false;
+  }
+  if (width === 0 || height === 0) {
+    width = window.innerWidth;
+    height = window.innerHeight;
+    debugOverlay("game-canvas size 0, uso window", { level: 'warn' });
+  }
 
   state.engine.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
   camera = state.engine.camera;
@@ -348,7 +419,10 @@ function initThreeJS() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // Fallback: colore cielo di default anche se il background non è ancora impostato
+  renderer.setClearColor(0x87ceeb, 1);
   container.appendChild(renderer.domElement);
+  debugOverlay("Renderer OK");
 
   // Illuminazione
   var ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -365,6 +439,7 @@ function initThreeJS() {
   var fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
   fillLight.position.set(-50, 30, -50);
   scene.add(fillLight);
+  debugOverlay("Luci create");
 
   // Conserva riferimenti per tuning per-ambiente
   if (state && state.environment) {
@@ -373,8 +448,34 @@ function initThreeJS() {
       directional: directionalLight,
       fill: fillLight,
     };
+    console.log("💡 Luci salvate in state.environment.lights");
+    debugOverlay("Luci salvate");
+  } else {
+    console.error("❌ state.environment non disponibile!");
+    debugOverlay("state.environment mancante", { level: 'error' });
   }
 
+  // Applica impostazioni lighting (worldSettings è già stato caricato in startGame)
+  if (state.worldSettings) {
+    console.log("🌍 Applico worldSettings esistente:", state.worldSettings);
+    applyDayNightCycle(state.worldSettings.timeMode, state.worldSettings);
+    debugOverlay("Applico timeMode " + state.worldSettings.timeMode);
+  } else {
+    // Fallback se non ci sono impostazioni mondo
+    state.worldSettings = {
+      mapSize: 200,
+      timeMode: "always-day",
+      terrainType: "grass",
+      lighting: { ambient: 0.5, directional: 0.8 }
+    };
+    console.log("⚠️ Nessun worldSettings, uso default");
+    applyDayNightCycle("always-day", state.worldSettings);
+    debugOverlay("Fallback worldSettings default");
+  }
+
+  // Crea SEMPRE il pavimento base per ogni mondo
+  createBasicFloor();
+  
   // Controlli
   setupControls();
 
@@ -402,6 +503,152 @@ function initThreeJS() {
   return true;
 }
 
+/**
+ * Applica le impostazioni di luce basate sul timeMode del mondo
+ * @param {string} timeMode - Modalità tempo (always-day, always-night, dawn, dusk, real-time, cycle)
+ * @param {Object} worldSettings - Impostazioni mondo con lighting personalizzato
+ */
+function applyDayNightCycle(timeMode, worldSettings) {
+  console.log("╔═══════════════════════════════════════╗");
+  console.log("║ 🌓 APPLICA CICLO GIORNO/NOTTE        ║");
+  console.log("╚═══════════════════════════════════════╝");
+  console.log("⏰ TimeMode:", timeMode);
+  console.log("🌍 WorldSettings:", worldSettings);
+  console.log("🔍 State:", state);
+  console.log("🔍 State.environment:", state ? state.environment : "NULL");
+  console.log("💡 State.environment.lights:", state && state.environment ? state.environment.lights : "NULL");
+  debugOverlay("ApplyTime " + timeMode);
+  
+  if (!state || !state.environment || !state.environment.lights) {
+    console.error("❌ Luci non disponibili per applicare ciclo giorno/notte", {
+      state: !!state,
+      environment: !!(state && state.environment),
+      lights: !!(state && state.environment && state.environment.lights)
+    });
+    debugOverlay("Luci mancanti", { level: 'error' });
+    return;
+  }
+
+  var lights = state.environment.lights;
+  var ambientLight = lights.ambient;
+  var directionalLight = lights.directional;
+  var fillLight = lights.fill;
+  
+  console.log("✅ Luci trovate:", { ambient: !!ambientLight, directional: !!directionalLight, fill: !!fillLight });
+
+  // Usa valori da worldSettings se disponibili, altrimenti defaults
+  var defaultAmbient = worldSettings && worldSettings.lighting ? worldSettings.lighting.ambient : 0.5;
+  var defaultDirectional = worldSettings && worldSettings.lighting ? worldSettings.lighting.directional : 0.8;
+
+  timeMode = timeMode || "always-day";
+  
+  var sceneRef = state.engine.scene;
+  if (!sceneRef) {
+    console.error("❌ Scene non trovata in state.engine.scene");
+    return;
+  }
+
+  console.log("🎨 Applicando timeMode:", timeMode, "su scene:", !!sceneRef);
+
+  switch (timeMode) {
+    case "always-day":
+      sceneRef.background = new THREE.Color(0x87ceeb); // Azzurro cielo
+      sceneRef.fog = new THREE.Fog(0x87ceeb, 50, 300);
+      ambientLight.intensity = defaultAmbient;
+      directionalLight.intensity = defaultDirectional;
+      directionalLight.color.setHex(0xffffff);
+      directionalLight.position.set(50, 50, 50);
+      fillLight.intensity = 0.3;
+      console.log("╔═════════════════════════════════════╗");
+      console.log("║ ☀️ SEMPRE GIORNO APPLICATO          ║");
+      console.log("╚═════════════════════════════════════╝");
+      console.log("🎨 Background Color Object:", sceneRef.background);
+      console.log("🎨 Background Hex:", sceneRef.background ? sceneRef.background.getHexString() : "null");
+      console.log("💡 Ambient Intensity:", ambientLight.intensity);
+      console.log("☀️ Directional Intensity:", directionalLight.intensity);
+      console.log("🌫️ Fog:", sceneRef.fog);
+      break;
+
+    case "always-night":
+      sceneRef.background = new THREE.Color(0x0a0a1a); // Blu scuro notte
+      sceneRef.fog = new THREE.Fog(0x0a0a1a, 30, 200);
+      ambientLight.intensity = 0.15;
+      directionalLight.intensity = 0.2;
+      directionalLight.color.setHex(0x8888ff); // Luna bluastra
+      directionalLight.position.set(-30, 40, 30);
+      fillLight.intensity = 0.1;
+      console.log("🌙 Tempo: Sempre Notte");
+      break;
+
+    case "dawn":
+      sceneRef.background = new THREE.Color(0xff8866); // Arancione alba
+      sceneRef.fog = new THREE.Fog(0xff8866, 40, 250);
+      ambientLight.intensity = 0.4;
+      directionalLight.intensity = 0.6;
+      directionalLight.color.setHex(0xffaa66);
+      directionalLight.position.set(60, 20, 40);
+      fillLight.intensity = 0.25;
+      console.log("🌅 Tempo: Alba");
+      break;
+
+    case "dusk":
+      sceneRef.background = new THREE.Color(0xff6644); // Rosso tramonto
+      sceneRef.fog = new THREE.Fog(0xff6644, 40, 250);
+      ambientLight.intensity = 0.35;
+      directionalLight.intensity = 0.5;
+      directionalLight.color.setHex(0xff7744);
+      directionalLight.position.set(-60, 15, 40);
+      fillLight.intensity = 0.2;
+      console.log("🌇 Tempo: Tramonto");
+      break;
+
+    case "real-time":
+      var now = new Date();
+      var hours = now.getHours();
+      if (hours >= 6 && hours < 12) {
+        applyDayNightCycle("dawn", worldSettings);
+      } else if (hours >= 12 && hours < 18) {
+        applyDayNightCycle("always-day", worldSettings);
+      } else if (hours >= 18 && hours < 21) {
+        applyDayNightCycle("dusk", worldSettings);
+      } else {
+        applyDayNightCycle("always-night", worldSettings);
+      }
+      console.log("🕐 Tempo: Ora Reale (ore " + hours + ")");
+      break;
+
+    case "cycle":
+      // Ciclo dinamico: 24h gioco = 20 minuti reali (1 ora = 50 secondi)
+      if (!state.dayNightCycle) {
+        state.dayNightCycle = { startTime: Date.now(), cycleLength: 1200000 }; // 20 minuti
+      }
+      var elapsed = Date.now() - state.dayNightCycle.startTime;
+      var progress = (elapsed % state.dayNightCycle.cycleLength) / state.dayNightCycle.cycleLength;
+      var gameHour = progress * 24;
+
+      if (gameHour >= 6 && gameHour < 12) {
+        applyDayNightCycle("dawn", worldSettings);
+      } else if (gameHour >= 12 && gameHour < 18) {
+        applyDayNightCycle("always-day", worldSettings);
+      } else if (gameHour >= 18 && gameHour < 22) {
+        applyDayNightCycle("dusk", worldSettings);
+      } else {
+        applyDayNightCycle("always-night", worldSettings);
+      }
+      // Questo verrà aggiornato nell'animate loop per cicli continui
+      break;
+
+    default:
+      console.warn("⚠️ TimeMode sconosciuto:", timeMode, "- uso always-day");
+      applyDayNightCycle("always-day", worldSettings);
+  }
+
+  // Salva il timeMode corrente nello stato
+  if (state.worldSettings) {
+    state.worldSettings.currentTimeMode = timeMode;
+  }
+}
+
 function setupMovementSystem() {
   if (!window.RSG || !window.RSG.systems || !window.RSG.systems.movement) {
     console.warn("⚠️ Movement system non disponibile (scripts/systems/movement.js non caricato?)");
@@ -426,6 +673,22 @@ function setupMovementSystem() {
 function setupArchitectMode() {
   if (!window.RSG || !window.RSG.ui || !window.RSG.ui.architect) {
     console.warn("⚠️ Architect mode non disponibile (scripts/ui/architect-mode.js non caricato?)");
+    // Prova a ricaricare dinamicamente lo script se non è presente
+    var alreadyLoading = document.querySelector('script[data-architect-reload="true"]');
+    if (!alreadyLoading) {
+      var tag = document.createElement('script');
+      tag.src = 'scripts/ui/architect-mode.js';
+      tag.dataset.architectReload = 'true';
+      tag.onload = function() {
+        console.log('✅ architect-mode.js ricaricato');
+        // Riprova a inizializzare dopo il load
+        setupArchitectMode();
+      };
+      tag.onerror = function() {
+        console.error('❌ Impossibile caricare scripts/ui/architect-mode.js');
+      };
+      document.body.appendChild(tag);
+    }
     return;
   }
 
@@ -445,6 +708,7 @@ function setupArchitectMode() {
 
   // Toggle globale per menu/input
   window.toggleArchitectMode = function () {
+    console.log("🟣 toggleArchitectMode chiamato");
     var desired = !(state && state.ui ? state.ui.isArchitectMode : false);
     window.RSG.ui.architect.setActive(desired);
     if (state && state.ui) {
@@ -589,23 +853,66 @@ function setupAISystem() {
   });
 }
 
-function createEnvironment() {
-  console.log("🌍 Creazione ambiente 3D...");
-
-  // Pavimento esterno (giardino / cortile)
-  var floorGeometry = new THREE.PlaneGeometry(200, 200);
+/**
+ * Crea un pavimento base - chiamato SEMPRE per ogni mondo
+ */
+function createBasicFloor() {
+  console.log("🟫 Creazione pavimento base...");
+  
+  // Ottieni dimensione mappa dalle impostazioni mondo
+  var mapSize = (state && state.worldSettings && state.worldSettings.mapSize) || 200;
+  var terrainType = (state && state.worldSettings && state.worldSettings.terrainType) || "grass";
+  
+  // Colori terreno in base al tipo
+  var terrainColors = {
+    grass: 0x4c8c4a,    // Verde erba
+    sand: 0xddc47a,     // Sabbia
+    snow: 0xf0f0f0,     // Neve bianca
+    stone: 0x7a7a7a,    // Pietra grigia
+    dirt: 0x8b7355      // Terra marrone
+  };
+  
+  var floorColor = terrainColors[terrainType] || terrainColors.grass;
+  
+  // Pavimento principale
+  var floorGeometry = new THREE.PlaneGeometry(mapSize, mapSize);
   var floorMaterial = new THREE.MeshStandardMaterial({
-    color: 0x4c8c4a,
+    color: floorColor,
     roughness: 0.8,
   });
   var floor = new THREE.Mesh(floorGeometry, floorMaterial);
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
+  floor.name = "basicFloor"; // Nome per identificarlo
   scene.add(floor);
+  
+  // Aggiungi alla collision
+  if (collisionObjects) {
+    collisionObjects.push(floor);
+  }
 
-  // Griglia
-  var gridHelper = new THREE.GridHelper(200, 40, 0x000000, 0x444444);
+  // Griglia di riferimento
+  var gridHelper = new THREE.GridHelper(mapSize, Math.floor(mapSize / 5), 0x000000, 0x444444);
+  gridHelper.name = "gridHelper";
   scene.add(gridHelper);
+  
+  console.log("✅ Pavimento creato:", mapSize + "x" + mapSize, "Tipo:", terrainType);
+}
+
+function createEnvironment() {
+  console.log("🌍 Creazione ambiente 3D completo...");
+
+  // Pavimento interno della casa (legno) nella zona centrale
+  var houseFloorGeometry = new THREE.PlaneGeometry(40, 30);
+  var houseFloorMaterial = new THREE.MeshStandardMaterial({
+    color: 0x8b7355,
+    roughness: 0.7,
+  });
+  var houseFloor = new THREE.Mesh(houseFloorGeometry, houseFloorMaterial);
+  houseFloor.rotation.x = -Math.PI / 2;
+  houseFloor.position.set(0, 0.02, 0);
+  houseFloor.receiveShadow = true;
+  scene.add(houseFloor);
 
   // Pavimento interno della casa (legno) nella zona centrale
   var houseFloorGeometry = new THREE.PlaneGeometry(40, 30);
@@ -751,7 +1058,21 @@ function loadModels(modelListOverride) {
     return;
   }
 
-  var furniture = modelListOverride || window.RSG.content.models.getFurniture();
+  var furniture;
+  
+  if (modelListOverride) {
+    furniture = modelListOverride;
+    console.log("🕹️ Usando lista modelli override:", furniture.length);
+  } else if (state.worldData && state.worldData.objects && state.worldData.objects.length > 0) {
+    // Carica modelli dal worldData salvato
+    furniture = state.worldData.objects;
+    console.log("🌍 Caricamento modelli da worldData:", furniture.length, "oggetti");
+  } else {
+    // Fallback: usa lista statica
+    furniture = window.RSG.content.models.getFurniture();
+    console.log("📋 Usando lista modelli statica (fallback):", furniture.length);
+  }
+  
   window.RSG.systems.modelLoader.loadAll({
     scene: scene,
     state: state,
@@ -1200,11 +1521,54 @@ function animate() {
     window.RSG.ui.architect.update(delta);
   }
 
+  // Update day/night cycle if in cycle mode
+  if (state.worldSettings && state.worldSettings.timeMode === "cycle") {
+    if (!state.dayNightCycle) {
+      state.dayNightCycle = { startTime: Date.now(), cycleLength: 1200000, lastPhase: null };
+    }
+    var elapsed = Date.now() - state.dayNightCycle.startTime;
+    var progress = (elapsed % state.dayNightCycle.cycleLength) / state.dayNightCycle.cycleLength;
+    var gameHour = progress * 24;
+    
+    var currentPhase;
+    if (gameHour >= 6 && gameHour < 12) currentPhase = "dawn";
+    else if (gameHour >= 12 && gameHour < 18) currentPhase = "day";
+    else if (gameHour >= 18 && gameHour < 22) currentPhase = "dusk";
+    else currentPhase = "night";
+    
+    // Solo aggiorna quando cambia fase
+    if (currentPhase !== state.dayNightCycle.lastPhase) {
+      state.dayNightCycle.lastPhase = currentPhase;
+      var phaseMap = { dawn: "dawn", day: "always-day", dusk: "dusk", night: "always-night" };
+      applyDayNightCycle(phaseMap[currentPhase], state.worldSettings);
+    }
+  }
+
   // Update ammo HUD
   updateAmmoDisplay();
 
   if (renderer && scene && camera) {
+    // Log solo la prima volta
+    if (!window._renderLogDone) {
+      console.log("╔══════════════════════════════════════╗");
+      console.log("║ 🎬 RENDERING LOOP ATTIVO              ║");
+      console.log("╚══════════════════════════════════════╝");
+      console.log("📹 Renderer:", renderer);
+      console.log("🎬 Scene:", scene);
+      console.log("📷 Camera:", camera);
+      console.log("🎨 Scene Background:", scene.background);
+      console.log("👁️ Scene Children:", scene.children.length);
+      window._renderLogDone = true;
+      debugOverlay("Rendering attivo, children=" + scene.children.length);
+    }
     renderer.render(scene, camera);
+  } else {
+    if (!window._renderErrorLogDone) {
+      console.error("❌ RENDERING IMPOSSIBILE - Mancano oggetti!");
+      console.error("Renderer:", !!renderer, "Scene:", !!scene, "Camera:", !!camera);
+      window._renderErrorLogDone = true;
+      debugOverlay("Render mancante R/Sc/Cam", { level: 'error' });
+    }
   }
 }
 

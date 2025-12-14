@@ -44,9 +44,11 @@ function createWindow() {
     // Carica il file index.html
     mainWindow.loadFile('index.html');
 
-    // DevTools disabilitato per produzione
-    // Per debug: decommentare la riga sotto
-    // mainWindow.webContents.openDevTools();
+    // DevTools abilitato di default per il debug (stacca la finestra)
+    // Imposta SHOW_DEVTOOLS=false se vuoi disattivarlo.
+    if (process.env.SHOW_DEVTOOLS !== 'false') {
+        mainWindow.webContents.openDevTools({ mode: 'detach' });
+    }
 
     // Evento quando la finestra viene chiusa
     mainWindow.on('closed', function () {

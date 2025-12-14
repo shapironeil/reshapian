@@ -12,6 +12,16 @@ window.RSG.systems = window.RSG.systems || {};
   var lastSpaceTime = 0;
   var DOUBLE_SPACE_MS = 350;
 
+  function setBodyNoSelect(flag) {
+    var body = document.body;
+    if (!body) return;
+    if (flag) {
+      body.classList.add("architect-no-select");
+    } else {
+      body.classList.remove("architect-no-select");
+    }
+  }
+
   function addListener(target, type, handler, options) {
     target.addEventListener(type, handler, options);
     listeners.push({ target: target, type: type, handler: handler, options: options });
@@ -54,6 +64,8 @@ window.RSG.systems = window.RSG.systems || {};
 
     function isMovementAllowed() {
       if (!state) return true;
+      if (shiftMouseMode) return false;
+      if (state.ui && state.ui.isTypingArchitect) return false;
       if (state.mode === "architect") return true;
       return isGameplayMode();
     }
@@ -108,7 +120,7 @@ window.RSG.systems = window.RSG.systems || {};
           break;
         case "Tab":
           event.preventDefault();
-          if (typeof actions.toggleInventory === "function") {
+          if (state.mode !== "architect" && typeof actions.toggleInventory === "function") {
             actions.toggleInventory();
           }
           break;
@@ -126,12 +138,18 @@ window.RSG.systems = window.RSG.systems || {};
         case "ShiftRight":
           if (!shiftMouseMode) {
             shiftMouseMode = true;
+            if (state && state.ui) {
+              state.ui.isMouseMode = true;
+            }
             wasPointerLockedBeforeShift = !!document.pointerLockElement;
             if (document.pointerLockElement) {
               document.exitPointerLock();
             }
             state.input.moveForward = state.input.moveBackward = false;
             state.input.moveLeft = state.input.moveRight = false;
+            if (state.mode === "architect") {
+              setBodyNoSelect(true);
+            }
           }
           break;
         case "Escape":
@@ -189,15 +207,40 @@ window.RSG.systems = window.RSG.systems || {};
       }
       if (event.code === "ShiftLeft" || event.code === "ShiftRight") {
         shiftMouseMode = false;
-        if (wasPointerLockedBeforeShift && canvasContainer && canvasContainer.requestPointerLock) {
-          canvasContainer.requestPointerLock();
+        if (state && state.ui) {
+          state.ui.isMouseMode = false;
         }
+        
+        // In Architect Mode: rilascio SHIFT = rientra in move mode (pointer lock)
+        if (state.mode === "architect") {
+          if (canvasContainer && canvasContainer.requestPointerLock) {
+            try {
+              canvasContainer.requestPointerLock();
+            } catch (e) {
+              // ignore
+            }
+          }
+        } else {
+          // In gameplay: ripristina lock solo se eri locked prima di premere SHIFT
+          if (wasPointerLockedBeforeShift && canvasContainer && canvasContainer.requestPointerLock) {
+            canvasContainer.requestPointerLock();
+          }
+        }
+        
         wasPointerLockedBeforeShift = false;
+        setBodyNoSelect(false);
       }
     }
 
     function onMouseMove(event) {
-      if (!document.pointerLockElement) return;
+      // Supporta look con pointer lock OPPURE tasto destro in architect mode.
+      // In mouse mode (SHIFT premuto) la scena deve restare ferma: niente look.
+      var isLocked = !!document.pointerLockElement;
+      var isRightDown = (event.buttons & 2) === 2;
+      var allowRightLook = (state.mode === "architect" && isRightDown && !shiftMouseMode);
+
+      if (!isLocked && !allowRightLook) return;
+
       if (!isGameplayMode() && state.mode !== "architect") return;
 
       var camera = opts.getCamera();
@@ -214,8 +257,23 @@ window.RSG.systems = window.RSG.systems || {};
     }
 
     function onCanvasClick() {
+      // Se stai tenendo premuto SHIFT, mantieni mouse libero
+      if (shiftMouseMode) {
+        return;
+      }
+      // In Architect Mode, il click sinistro serve per selezionare (mouse mode) o per UI.
+      // Il lock avviene solo quando NON sei in mouse mode.
+      if (state.mode === "architect") {
+        if (shiftMouseMode) return;
+        // Se non sei in mouse mode, consenti lock per rientrare nel movimento.
+      }
       if (this && this.requestPointerLock) {
-        this.requestPointerLock();
+        try {
+          // Può lanciare DOMException se il lock è in transizione: ignora e riprova al prossimo click.
+          this.requestPointerLock();
+        } catch (e) {
+          // ignore
+        }
       }
     }
 
